@@ -28,7 +28,7 @@ export function createTouchActions(settings: ModelSettings): TouchAction[] {
     }
   }
 
-  return Array.from(actionsByHitArea.values()).sort(compareTouchActions);
+  return Array.from(actionsByHitArea.values());
 }
 
 function createTouchAction(
@@ -75,39 +75,4 @@ function getPlayableMotionIndex(
   return playableMotionIndexes.length === motions.length
     ? undefined
     : playableMotionIndexes[0];
-}
-
-function compareTouchActions(left: TouchAction, right: TouchAction): number {
-  return (
-    getTouchActionPriority(left.hitArea) -
-    getTouchActionPriority(right.hitArea)
-  );
-}
-
-function getTouchActionPriority(hitArea: string): number {
-  if (hitArea.startsWith('TouchIdle')) {
-    return 0;
-  }
-
-  if (hitArea.startsWith('TouchDrag')) {
-    return 1;
-  }
-
-  if (hitArea === 'TouchSpecial') {
-    return 2;
-  }
-
-  if (hitArea === 'TouchHead') {
-    return 3;
-  }
-
-  if (hitArea === 'TouchBody') {
-    return 4;
-  }
-
-  if (hitArea === '背景') {
-    return 6;
-  }
-
-  return 5;
 }
