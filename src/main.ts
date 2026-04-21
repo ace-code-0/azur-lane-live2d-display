@@ -7,7 +7,6 @@ import {
 
 const MODEL_URL = '/model/model0.json';
 const MODEL_SCALE = 0.1;
-const TAP_COOLDOWN_MS = 250;
 const DEBUG_TOUCH = true;
 
 type PixiApplication = PIXI.Application<PIXI.Renderer>;
@@ -110,22 +109,11 @@ function installTouchInteractions(
   app: PixiApplication,
   model: Cubism4Model,
 ): void {
-  let lastTapTime = 0;
-
   if (DEBUG_TOUCH) {
     console.log('[live2d-touch] installed', JSON.stringify(TOUCH_ACTIONS));
   }
 
   app.stage.on('pointertap', (event: PIXI.FederatedPointerEvent) => {
-    const now = performance.now();
-    if (now - lastTapTime < TAP_COOLDOWN_MS) {
-      if (DEBUG_TOUCH) {
-        console.log('[live2d-touch] ignored cooldown');
-      }
-      return;
-    }
-
-    lastTapTime = now;
     const hitAreas = model.hitTest(event.global.x, event.global.y);
 
     if (DEBUG_TOUCH) {
