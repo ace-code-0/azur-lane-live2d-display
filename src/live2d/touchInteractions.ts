@@ -6,6 +6,7 @@ import type { TouchAction } from './touchActions';
 
 type MotionController = {
   playTouchMotion(action: TouchAction): void;
+  startIdleMotion(): void;
 };
 
 export function installTouchInteractions(

@@ -1,6 +1,12 @@
 export type ModelMotion = {
   File?: string;
   Name?: string;
+  VarFloats?: {
+    Name: string;
+    Type: number;
+    Code: string;
+  }[];
+  Weight?: number;
 };
 
 export type ModelHitArea = {

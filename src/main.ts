@@ -1,5 +1,3 @@
-import { MotionPriority } from '@jannchie/pixi-live2d-display/cubism4';
-
 import { createApplication, updateStageHitArea } from './live2d/app';
 import { fitModel, loadModel } from './live2d/model';
 import { loadModelSettings } from './live2d/modelSettings';
@@ -22,7 +20,11 @@ async function bootstrap(): Promise<void> {
   const modelSettings = await loadModelSettings(MODEL_URL);
   const model = await loadModel(app, MODEL_URL);
   const touchActions = createTouchActions(modelSettings);
-  const motionController = createMotionController(model, DEBUG_TOUCH);
+  const motionController = createMotionController(
+    model,
+    modelSettings,
+    DEBUG_TOUCH,
+  );
 
   app.stage.addChild(model);
   fitModel(app, model, MODEL_SCALE);
@@ -33,13 +35,14 @@ async function bootstrap(): Promise<void> {
     motionController,
     DEBUG_TOUCH,
   );
+
   Object.assign(window, { pixiApp: app, live2dModel: model });
 
   window.addEventListener('resize', () => {
     updateStageHitArea(app);
     fitModel(app, model, MODEL_SCALE);
   });
-  await model.motion('Idle', 0, MotionPriority.IDLE);
+  motionController.startIdleMotion();
 }
 
 bootstrap().catch((error: unknown) => {

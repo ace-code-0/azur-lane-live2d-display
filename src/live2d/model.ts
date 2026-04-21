@@ -15,6 +15,7 @@ export async function loadModel(
     ticker: app.ticker,
     autoFocus: true,
     autoHitTest: true,
+    idleMotionGroup: '__disabled_idle__',
     motionPreload: MotionPreloadStrategy.NONE,
   });
   // xy偏移
