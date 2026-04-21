@@ -2,6 +2,7 @@ import type { ModelSettings } from './modelSettings';
 
 export type TouchAction = {
   hitArea: string;
+  kind: 'motion' | 'script';
   group: string;
   motionIndex?: number;
 };
@@ -36,19 +37,44 @@ function createTouchAction(
   settings: ModelSettings,
 ): TouchAction {
   const [group, motionName] = motion.split(':', 2);
-  const motionIndex =
-    motionName === undefined
-      ? undefined
-      : settings.FileReferences.Motions?.[group]?.findIndex(
-          ({ Name }) => Name === motionName,
-        );
+  const motions = settings.FileReferences.Motions?.[group] ?? [];
+  const motionIndex = getPlayableMotionIndex(motions, motionName);
 
   return {
     hitArea,
+    kind: motionIndex === null ? 'script' : 'motion',
     group,
-    motionIndex:
-      motionIndex === undefined || motionIndex < 0 ? undefined : motionIndex,
+    motionIndex: motionIndex ?? undefined,
   };
+}
+
+function getPlayableMotionIndex(
+  motions: NonNullable<ModelSettings['FileReferences']['Motions']>[string],
+  motionName?: string,
+): number | null | undefined {
+  if (motionName !== undefined) {
+    const namedMotionIndex = motions.findIndex(
+      ({ Name }) => Name === motionName,
+    );
+
+    if (namedMotionIndex < 0) {
+      return null;
+    }
+
+    return motions[namedMotionIndex]?.File ? namedMotionIndex : null;
+  }
+
+  const playableMotionIndexes = motions.flatMap((motion, index) =>
+    motion.File ? [index] : [],
+  );
+
+  if (playableMotionIndexes.length === 0) {
+    return null;
+  }
+
+  return playableMotionIndexes.length === motions.length
+    ? undefined
+    : playableMotionIndexes[0];
 }
 
 function compareTouchActions(left: TouchAction, right: TouchAction): number {

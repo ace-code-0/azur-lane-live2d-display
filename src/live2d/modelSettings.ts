@@ -1,4 +1,5 @@
 export type ModelMotion = {
+  File?: string;
   Name?: string;
 };
 

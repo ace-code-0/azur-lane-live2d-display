@@ -39,5 +39,5 @@ export function installTouchInteractions(
 }
 
 function getBackgroundTouchAction(): TouchAction {
-  return { hitArea: '背景', group: 'Tap背景' };
+  return { hitArea: '背景', kind: 'motion', group: 'Tap背景' };
 }
