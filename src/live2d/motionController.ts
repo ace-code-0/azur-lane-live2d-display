@@ -1,10 +1,12 @@
 import {
+  createModelSettingsBridge,
   getModelMotions,
+  isExecutableModelMotion,
   MotionPriority,
 } from './live2dEngineBridge';
 
 import type { Cubism4Model } from './model';
-
+import type { ModelDialogElement } from '../ui/modelDialog';
 import type { ModelMotion, ModelSettings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
@@ -16,11 +18,13 @@ type TouchMotionState =
       status: 'loading';
       requestId: number;
       action: TouchAction;
+      motion: ModelMotion;
     }
   | {
       status: 'playing';
       requestId: number;
       action: TouchAction;
+      motion: ModelMotion;
     };
 
 type MotionManagerState = {
@@ -28,14 +32,18 @@ type MotionManagerState = {
   currentIndex?: number;
 };
 
+export type MotionController = {
+  playTouchMotion(action: TouchAction): void;
+  startIdleMotion(): void;
+  startMotion(reference: string): void;
+};
+
 export function createMotionController(
   model: Cubism4Model,
   modelSettings: ModelSettings,
+  modelDialog: ModelDialogElement,
   debugTouch: boolean,
-): {
-  playTouchMotion(action: TouchAction): void;
-  startIdleMotion(): void;
-} {
+): MotionController {
   const internalModel = model.internalModel;
   const motionVariables = new Map<string, number>([['idle', 0]]);
   let touchMotionState: TouchMotionState = { status: 'idle' };
@@ -46,6 +54,12 @@ export function createMotionController(
   }
 
   const motionManager = internalModel.motionManager;
+  const modelSettingsBridge = createModelSettingsBridge(model, modelSettings, {
+    startMotion(reference) {
+      runReferencedMotion(reference);
+    },
+  });
+  modelSettingsBridge.applyInitialSettings();
 
   motionManager.on('motionFinish', () => {
     const finishedMotion = getCurrentMotion();
@@ -65,17 +79,11 @@ export function createMotionController(
       return;
     }
 
-    const finishedState = touchMotionState;
-    touchMotionState = { status: 'idle' };
-
-    if (debugTouch) {
-      console.log('[live2d-touch] request finish', {
-        requestId: finishedState.requestId,
-        action: finishedState.action,
-      });
-    }
-
-    requestIdleMotion();
+    finishTouchMotion(
+      touchMotionState.requestId,
+      touchMotionState.action,
+      touchMotionState.motion,
+    );
   });
 
   function getCurrentMotion(): { group?: string; index?: number } {
@@ -119,7 +127,9 @@ export function createMotionController(
   function selectMotionIndex(group: string): number | undefined {
     const motions = getModelMotions(modelSettings, group);
     const candidates = motions.flatMap((motion, index) =>
-      motion.File && isMotionConditionMatched(motion) ? [index] : [],
+      isExecutableModelMotion(motion) && isMotionConditionMatched(motion)
+        ? [index]
+        : [],
     );
 
     return pickWeightedMotionIndex(motions, candidates);
@@ -209,112 +219,145 @@ export function createMotionController(
     return Number.isFinite(parsedValue) ? parsedValue : undefined;
   }
 
-  return {
-    startIdleMotion(): void {
-      void startIdleMotion();
-    },
+  function parseMotionReference(reference: string): {
+    group: string;
+    motionName?: string;
+  } {
+    const [group, motionName] = reference.split(':', 2);
 
-    playTouchMotion(action: TouchAction): void {
-      if (action.kind === 'script') {
-        if (debugTouch) {
-          console.log('[live2d-touch] script action skipped', action);
-        }
+    return { group, motionName };
+  }
 
-        return;
-      }
+  function findMotionIndex(
+    group: string,
+    motionName: string | undefined,
+  ): number | undefined {
+    if (motionName === undefined) {
+      return selectMotionIndex(group);
+    }
 
-      if (touchMotionState.status !== 'idle') {
-        if (debugTouch) {
-          console.log('[live2d-touch] request ignored', {
-            action,
-            touchMotionState,
-          });
-        }
+    const motionIndex = getModelMotions(modelSettings, group).findIndex(
+      ({ Name }) => Name === motionName,
+    );
 
-        return;
-      }
+    if (motionIndex < 0) {
+      throw new Error(`Motion not found in ${group}: ${motionName}`);
+    }
 
-      const motionIndex =
-        action.motionIndex ?? selectMotionIndex(action.group);
-      const motion =
-        motionIndex === undefined
-          ? undefined
-          : getModelMotions(modelSettings, action.group)[motionIndex];
+    return motionIndex;
+  }
 
-      if (
-        motionIndex === undefined ||
-        motion === undefined ||
-        !isMotionConditionMatched(motion)
-      ) {
-        if (debugTouch) {
-          console.log('[live2d-touch] no matched motion', {
-            action,
-            variables: Object.fromEntries(motionVariables),
-          });
-        }
+  function getMotion(group: string, motionIndex: number): ModelMotion {
+    const motion = getModelMotions(modelSettings, group)[motionIndex];
 
-        return;
-      }
+    if (!motion) {
+      throw new Error(`Motion index not found in ${group}: ${motionIndex}`);
+    }
 
-      const requestId = nextRequestId++;
-      touchMotionState = { status: 'loading', requestId, action };
+    return motion;
+  }
 
-      if (debugTouch) {
-        console.log('[live2d-touch] request start', { requestId, action });
-      }
+  function runReferencedMotion(reference: string): void {
+    const { group, motionName } = parseMotionReference(reference);
+    const motionIndex = findMotionIndex(group, motionName);
 
+    if (motionIndex === undefined) {
+      throw new Error(`No executable motion in group: ${group}`);
+    }
+
+    const motion = getMotion(group, motionIndex);
+
+    if (!isMotionConditionMatched(motion)) {
+      return;
+    }
+
+    modelSettingsBridge.applyMotionCommand(motion);
+    applyMotionAssignments(motion);
+    showMotionDialog(motion);
+
+    if (motion.File) {
       void model
-        .motion(action.group, motionIndex, MotionPriority.NORMAL)
+        .motion(group, motionIndex, MotionPriority.NORMAL)
         .then((started) => {
-          if (!started) {
-            if (
-              touchMotionState.status === 'loading' &&
-              touchMotionState.requestId === requestId
-            ) {
-              touchMotionState = { status: 'idle' };
-            }
-
-            if (debugTouch) {
-              console.log('[live2d-touch] request rejected', {
-                requestId,
-                action,
-                motionIndex,
-              });
-            }
-
-            requestIdleMotion();
-            return;
+          if (started) {
+            schedulePostCommand(motion);
           }
+        });
+      return;
+    }
 
-          if (
-            touchMotionState.status !== 'loading' ||
-            touchMotionState.requestId !== requestId
-          ) {
-            if (debugTouch) {
-              console.log('[live2d-touch] stale request ignored', {
-                requestId,
-                action,
-                motionIndex,
-                touchMotionState,
-              });
-            }
+    schedulePostCommand(motion);
+  }
 
-            return;
-          }
+  function schedulePostCommand(motion: ModelMotion): void {
+    if (motion.MotionDuration === undefined) {
+      modelSettingsBridge.applyMotionPostCommand(motion);
+      return;
+    }
 
-          touchMotionState = { status: 'playing', requestId, action };
-          applyMotionAssignments(motion);
+    window.setTimeout(() => {
+      modelSettingsBridge.applyMotionPostCommand(motion);
+    }, motion.MotionDuration);
+  }
 
-          if (debugTouch) {
-            console.log('[live2d-touch] request playing', {
-              requestId,
-              action,
-              motionIndex,
-              variables: Object.fromEntries(motionVariables),
-            });
-          }
-        })
-        .catch((error: unknown) => {
+  function playTouchMotion(action: TouchAction): void {
+    if (touchMotionState.status !== 'idle') {
+      if (debugTouch) {
+        console.log('[live2d-touch] request ignored', {
+          action,
+          touchMotionState,
+        });
+      }
+
+      return;
+    }
+
+    const motionIndex = action.motionIndex ?? selectMotionIndex(action.group);
+    const motion =
+      motionIndex === undefined
+        ? undefined
+        : getMotion(action.group, motionIndex);
+
+    if (
+      motionIndex === undefined ||
+      motion === undefined ||
+      !isMotionConditionMatched(motion)
+    ) {
+      if (debugTouch) {
+        console.log('[live2d-touch] no matched motion', {
+          action,
+          variables: Object.fromEntries(motionVariables),
+        });
+      }
+
+      return;
+    }
+
+    const requestId = nextRequestId++;
+    touchMotionState = {
+      status: motion.File ? 'loading' : 'playing',
+      requestId,
+      action,
+      motion,
+    };
+
+    if (debugTouch) {
+      console.log('[live2d-touch] request start', { requestId, action });
+    }
+
+    modelSettingsBridge.applyMotionCommand(motion);
+    showMotionDialog(motion);
+
+    if (!motion.File) {
+      applyMotionAssignments(motion);
+      scheduleTouchMotionFinish(requestId, action, motion);
+      return;
+    }
+
+    void model
+      .motion(action.group, motionIndex, MotionPriority.NORMAL)
+      .then((started) => {
+        if (!started) {
           if (
             touchMotionState.status === 'loading' &&
             touchMotionState.requestId === requestId
@@ -322,9 +365,120 @@ export function createMotionController(
             touchMotionState = { status: 'idle' };
           }
 
-          console.error('[live2d-touch] motion failed', { ...action, error });
+          if (debugTouch) {
+            console.log('[live2d-touch] request rejected', {
+              requestId,
+              action,
+              motionIndex,
+            });
+          }
+
           requestIdleMotion();
-        });
+          return;
+        }
+
+        if (
+          touchMotionState.status !== 'loading' ||
+          touchMotionState.requestId !== requestId
+        ) {
+          if (debugTouch) {
+            console.log('[live2d-touch] stale request ignored', {
+              requestId,
+              action,
+              motionIndex,
+              touchMotionState,
+            });
+          }
+
+          return;
+        }
+
+        touchMotionState = {
+          status: 'playing',
+          requestId,
+          action,
+          motion,
+        };
+        applyMotionAssignments(motion);
+        scheduleTouchMotionFinish(requestId, action, motion);
+
+        if (debugTouch) {
+          console.log('[live2d-touch] request playing', {
+            requestId,
+            action,
+            motionIndex,
+            variables: Object.fromEntries(motionVariables),
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        if (
+          touchMotionState.status === 'loading' &&
+          touchMotionState.requestId === requestId
+        ) {
+          touchMotionState = { status: 'idle' };
+        }
+
+        console.error('[live2d-touch] motion failed', { ...action, error });
+        requestIdleMotion();
+      });
+  }
+
+  function scheduleTouchMotionFinish(
+    requestId: number,
+    action: TouchAction,
+    motion: ModelMotion,
+  ): void {
+    if (motion.MotionDuration === undefined) {
+      if (!motion.File) {
+        finishTouchMotion(requestId, action, motion);
+      }
+
+      return;
+    }
+
+    window.setTimeout(() => {
+      finishTouchMotion(requestId, action, motion);
+    }, motion.MotionDuration);
+  }
+
+  function finishTouchMotion(
+    requestId: number,
+    action: TouchAction,
+    motion: ModelMotion,
+  ): void {
+    if (
+      touchMotionState.status !== 'playing' ||
+      touchMotionState.requestId !== requestId
+    ) {
+      return;
+    }
+
+    touchMotionState = { status: 'idle' };
+    modelSettingsBridge.applyMotionPostCommand(motion);
+
+    if (debugTouch) {
+      console.log('[live2d-touch] request finish', { requestId, action });
+    }
+
+    requestIdleMotion();
+  }
+
+  function showMotionDialog(motion: ModelMotion): void {
+    modelDialog.showMotion(motion, (choice) => {
+      runReferencedMotion(choice.NextMtn);
+    });
+  }
+
+  return {
+    playTouchMotion,
+
+    startIdleMotion(): void {
+      void startIdleMotion();
+    },
+
+    startMotion(reference: string): void {
+      runReferencedMotion(reference);
     },
   };
 }

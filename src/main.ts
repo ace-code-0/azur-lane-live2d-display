@@ -4,9 +4,9 @@ import { loadModelSettings } from './live2d/modelSettings';
 import { createMotionController } from './live2d/motionController';
 import { createTouchActions } from './live2d/touchActions';
 import { installTouchInteractions } from './live2d/touchInteractions';
+import { createModelDialog } from './ui/modelDialog';
 
 const MODEL_URL = '/model/model0.json';
-const MODEL_SCALE = 0.1;
 const DEBUG_TOUCH = true;
 
 async function bootstrap(): Promise<void> {
@@ -17,17 +17,19 @@ async function bootstrap(): Promise<void> {
   }
 
   const app = await createApplication(root);
+  const modelDialog = createModelDialog(document.body);
   const modelSettings = await loadModelSettings(MODEL_URL);
-  const model = await loadModel(app, MODEL_URL);
+  const model = await loadModel(app, MODEL_URL, modelSettings);
   const touchActions = createTouchActions(modelSettings);
   const motionController = createMotionController(
     model,
     modelSettings,
+    modelDialog,
     DEBUG_TOUCH,
   );
 
   app.stage.addChild(model);
-  fitModel(app, model, MODEL_SCALE);
+  fitModel(app, model, modelSettings.Options);
   installTouchInteractions(
     app,
     model,
@@ -38,9 +40,19 @@ async function bootstrap(): Promise<void> {
 
   Object.assign(window, { pixiApp: app, live2dModel: model });
 
+  if (modelSettings.Controllers.KeyTrigger.Enabled) {
+    window.addEventListener('keydown', (event) => {
+      for (const item of modelSettings.Controllers.KeyTrigger.Items) {
+        if (event.keyCode === item.Input) {
+          motionController.startMotion(item.DownMtn);
+        }
+      }
+    });
+  }
+
   window.addEventListener('resize', () => {
     updateStageHitArea(app);
-    fitModel(app, model, MODEL_SCALE);
+    fitModel(app, model, modelSettings.Options);
   });
   motionController.startIdleMotion();
 }

@@ -14,6 +14,7 @@
     "vite": "^7.0.0"
   },
   "dependencies": {
+    "lit": "^3.3.2",
     "pixi.js": "^8.18.1",
     "untitled-pixi-live2d-engine": "^1.0.2"
   }

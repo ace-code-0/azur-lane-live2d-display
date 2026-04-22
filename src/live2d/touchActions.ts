@@ -1,4 +1,7 @@
-import { getModelMotions } from './live2dEngineBridge';
+import {
+  getModelMotions,
+  isExecutableModelMotion,
+} from './live2dEngineBridge';
 
 import type { ModelMotion, ModelSettings } from './modelSettings';
 
@@ -63,11 +66,13 @@ function getPlayableMotionIndex(
       return null;
     }
 
-    return motions[namedMotionIndex]?.File ? namedMotionIndex : null;
+    return isExecutableModelMotion(motions[namedMotionIndex])
+      ? namedMotionIndex
+      : null;
   }
 
   const playableMotionIndexes = motions.flatMap((motion, index) =>
-    motion.File ? [index] : [],
+    isExecutableModelMotion(motion) ? [index] : [],
   );
 
   if (playableMotionIndexes.length === 0) {
