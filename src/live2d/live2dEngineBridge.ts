@@ -2,7 +2,7 @@ export {
   Live2DModel,
   MotionPreloadStrategy,
   MotionPriority,
-} from 'untitled-pixi-live2d-engine';
+} from 'untitled-pixi-live2d-engine/cubism';
 
 import type { Cubism4Model } from './model';
 import type { ModelMotion, ModelSettings } from './modelSettings';
@@ -11,6 +11,15 @@ export type ModelSettingsBridge = {
   applyInitialSettings(): void;
   applyMotionCommand(motion: ModelMotion): void;
   applyMotionPostCommand(motion: ModelMotion): void;
+};
+
+export type EngineModelSettings = ModelSettings & {
+  url: string;
+  Groups: {
+    Target: 'Parameter';
+    Name: 'EyeBlink' | 'LipSync';
+    Ids: string[];
+  }[];
 };
 
 type BridgeCallbacks = {
@@ -50,6 +59,28 @@ export function getModelMotions(
   }
 
   return groupMotions;
+}
+
+export function createEngineModelSettings(
+  settings: ModelSettings,
+  modelUrl: string,
+): EngineModelSettings {
+  return {
+    ...settings,
+    url: modelUrl,
+    Groups: [
+      {
+        Target: 'Parameter',
+        Name: 'EyeBlink',
+        Ids: settings.Controllers.EyeBlink.Items.map(({ Id }) => Id),
+      },
+      {
+        Target: 'Parameter',
+        Name: 'LipSync',
+        Ids: settings.Controllers.LipSync.Items.map(({ Id }) => Id),
+      },
+    ],
+  };
 }
 
 export function isExecutableModelMotion(motion: ModelMotion): boolean {
@@ -187,13 +218,13 @@ function setParameter(
 ): void {
   const { coreModel } = getInternalModel(model);
 
-  if (coreModel?.setParamFloat) {
-    coreModel.setParamFloat(id, value);
+  if (coreModel?.setParameterValueById) {
+    coreModel.setParameterValueById(getEngineId(model, id), value);
     return;
   }
 
-  if (coreModel?.setParameterValueById) {
-    coreModel.setParameterValueById(getEngineId(model, id), value);
+  if (coreModel?.setParamFloat) {
+    coreModel.setParamFloat(id, value);
     return;
   }
 
@@ -207,13 +238,13 @@ function setPartOpacity(
 ): void {
   const { coreModel } = getInternalModel(model);
 
-  if (coreModel?.setPartsOpacity) {
-    coreModel.setPartsOpacity(id, value);
+  if (coreModel?.setPartOpacityById) {
+    coreModel.setPartOpacityById(getEngineId(model, id), value);
     return;
   }
 
-  if (coreModel?.setPartOpacityById) {
-    coreModel.setPartOpacityById(getEngineId(model, id), value);
+  if (coreModel?.setPartsOpacity) {
+    coreModel.setPartsOpacity(id, value);
     return;
   }
 

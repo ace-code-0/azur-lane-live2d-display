@@ -84,9 +84,14 @@ export class ModelDialogElement extends LitElement {
     }
   `;
 
-  private state: DialogState = { visible: false };
+  private declare state: DialogState;
   private closeTimer: number | undefined;
   private choiceHandler: ((choice: ModelChoice) => void) | undefined;
+
+  constructor() {
+    super();
+    this.state = { visible: false };
+  }
 
   showMotion(
     motion: ModelMotion,
