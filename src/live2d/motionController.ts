@@ -1,6 +1,10 @@
-import { MotionPriority } from '@jannchie/pixi-live2d-display/cubism4';
+import {
+  getModelMotions,
+  MotionPriority,
+} from './live2dEngineBridge';
 
 import type { Cubism4Model } from './model';
+
 import type { ModelMotion, ModelSettings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
@@ -113,7 +117,7 @@ export function createMotionController(
   }
 
   function selectMotionIndex(group: string): number | undefined {
-    const motions = modelSettings.FileReferences.Motions?.[group] ?? [];
+    const motions = getModelMotions(modelSettings, group);
     const candidates = motions.flatMap((motion, index) =>
       motion.File && isMotionConditionMatched(motion) ? [index] : [],
     );
@@ -235,9 +239,7 @@ export function createMotionController(
       const motion =
         motionIndex === undefined
           ? undefined
-          : modelSettings.FileReferences.Motions?.[action.group]?.[
-              motionIndex
-            ];
+          : getModelMotions(modelSettings, action.group)[motionIndex];
 
       if (
         motionIndex === undefined ||

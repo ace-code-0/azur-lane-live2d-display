@@ -1,4 +1,6 @@
-import type { ModelSettings } from './modelSettings';
+import { getModelMotions } from './live2dEngineBridge';
+
+import type { ModelMotion, ModelSettings } from './modelSettings';
 
 export type TouchAction = {
   hitArea: string;
@@ -10,7 +12,7 @@ export type TouchAction = {
 export function createTouchActions(settings: ModelSettings): TouchAction[] {
   const actionsByHitArea = new Map<string, TouchAction>();
 
-  for (const hitArea of settings.HitAreas ?? []) {
+  for (const hitArea of settings.HitAreas) {
     if (hitArea.Motion) {
       actionsByHitArea.set(
         hitArea.Name,
@@ -19,8 +21,8 @@ export function createTouchActions(settings: ModelSettings): TouchAction[] {
     }
   }
 
-  for (const item of settings.Controllers?.ParamHit?.Items ?? []) {
-    if (item.HitArea && item.MaxMtn && !actionsByHitArea.has(item.HitArea)) {
+  for (const item of settings.Controllers.ParamHit.Items) {
+    if (!actionsByHitArea.has(item.HitArea)) {
       actionsByHitArea.set(
         item.HitArea,
         createTouchAction(item.HitArea, item.MaxMtn, settings),
@@ -37,7 +39,7 @@ function createTouchAction(
   settings: ModelSettings,
 ): TouchAction {
   const [group, motionName] = motion.split(':', 2);
-  const motions = settings.FileReferences.Motions?.[group] ?? [];
+  const motions = getModelMotions(settings, group);
   const motionIndex = getPlayableMotionIndex(motions, motionName);
 
   return {
@@ -49,7 +51,7 @@ function createTouchAction(
 }
 
 function getPlayableMotionIndex(
-  motions: NonNullable<ModelSettings['FileReferences']['Motions']>[string],
+  motions: ModelMotion[],
   motionName?: string,
 ): number | null | undefined {
   if (motionName !== undefined) {

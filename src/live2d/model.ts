@@ -1,7 +1,7 @@
 import {
   Live2DModel,
   MotionPreloadStrategy,
-} from '@jannchie/pixi-live2d-display/cubism4';
+} from './live2dEngineBridge';
 
 import type { PixiApplication } from './app';
 
@@ -26,8 +26,6 @@ export async function loadModel(
   // 显式启用交互
   model.eventMode = 'dynamic';
   model.cursor = 'pointer';
-  model.setRenderer(app.renderer);
-
   return model;
 }
 
