@@ -19,6 +19,11 @@ type TouchMotionState =
       action: TouchAction;
     };
 
+type MotionManagerState = {
+  currentGroup?: string;
+  currentIndex?: number;
+};
+
 export function createMotionController(
   model: Cubism4Model,
   modelSettings: ModelSettings,
@@ -36,15 +41,23 @@ export function createMotionController(
     throw new Error('Live2D internal model is not ready');
   }
 
-  internalModel.motionManager.on('motionFinish', () => {
+  const motionManager = internalModel.motionManager;
+
+  motionManager.on('motionFinish', () => {
+    const finishedMotion = getCurrentMotion();
+
     if (touchMotionState.status !== 'playing') {
       if (debugTouch) {
         console.log('[live2d-motion] manager finish ignored', {
+          finishedMotion,
           touchMotionState,
         });
       }
 
-      requestIdleMotion();
+      if (finishedMotion.group !== 'Idle') {
+        requestIdleMotion();
+      }
+
       return;
     }
 
@@ -60,6 +73,15 @@ export function createMotionController(
 
     requestIdleMotion();
   });
+
+  function getCurrentMotion(): { group?: string; index?: number } {
+    const state = motionManager.state as MotionManagerState;
+
+    return {
+      group: state.currentGroup,
+      index: state.currentIndex,
+    };
+  }
 
   function requestIdleMotion(): void {
     window.setTimeout(() => {
