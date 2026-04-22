@@ -16,19 +16,46 @@ export type ModelChoice = {
 };
 
 export type ModelMotion = {
-  File?: string;
-  Name?: string;
+  Name: string;
   Sound?: string;
+  File?: string;
+  FileLoop?: boolean;
   Text?: string;
   Command?: string;
   PostCommand?: string;
-  FileLoop?: boolean;
   VarFloats?: ModelVariable[];
   Weight?: number;
   Speed?: number;
   MotionDuration?: number;
   TextDuration?: number;
   Choices?: ModelChoice[];
+};
+
+export type ModelMotionGroups = {
+  Idle: ModelMotion[];
+  'Idle#1': ModelMotion[];
+  Start: ModelMotion[];
+  触摸: ModelMotion[];
+  特殊触摸: ModelMotion[];
+  Tap身体: ModelMotion[];
+  Tap背景: ModelMotion[];
+  Leave30_30_30: ModelMotion[];
+  选项: ModelMotion[];
+  台词鉴赏_选项: ModelMotion[];
+  台词鉴赏: ModelMotion[];
+  TouchDrag1: ModelMotion[];
+  TouchDrag2: ModelMotion[];
+  TouchDrag3: ModelMotion[];
+  TouchDrag4: ModelMotion[];
+  TouchDrag5: ModelMotion[];
+  TouchIdle1: ModelMotion[];
+  TouchIdle2: ModelMotion[];
+  TouchIdle3: ModelMotion[];
+  TouchIdle4: ModelMotion[];
+  TouchIdle5: ModelMotion[];
+  Shake: ModelMotion[];
+  'start后置#2': ModelMotion[];
+  '打球后置#3': ModelMotion[];
 };
 
 export type ModelHitArea = {
@@ -39,110 +66,146 @@ export type ModelHitArea = {
 
 export type ModelPhysicsV2 = {
   File: string;
-  MaxWeight?: number;
+  MaxWeight: number;
 };
 
 export type ModelFileReferences = {
   Moc: string;
   Textures: string[];
-  Physics?: string;
-  PhysicsV2?: ModelPhysicsV2;
-  Motions?: Record<string, ModelMotion[]>;
+  Physics: string;
+  PhysicsV2: ModelPhysicsV2;
+  Motions: ModelMotionGroups;
 };
 
-export type ModelControllerItem = {
-  Name?: string;
+export type ModelParamHitItem = {
+  Name: string;
   Id: string;
-  Min?: number;
-  Max?: number;
-  Value?: number;
-  DefaultValue?: number;
-  BlendMode?: number;
-  Input?: number;
-  Axis?: number;
-  Factor?: number;
-  HitArea?: string;
-  ReleaseType?: number;
-  MaxMtn?: string;
-  Ids?: string[];
+  HitArea: string;
+  Axis: 0;
+  Factor: number;
+  ReleaseType: 0;
+  MaxMtn: string;
 };
 
 export type ModelKeyTriggerItem = {
   Input: number;
-  DownMtn?: string;
-  UpMtn?: string;
+  DownMtn: string;
 };
 
-export type ModelController = {
-  Enabled?: boolean;
-  Items?: ModelControllerItem[];
+export type ModelEyeBlinkItem = {
+  Id: string;
+  Min: number;
+  Max: number;
+  BlendMode: 2;
+  Input: 0;
 };
 
-export type ModelIntervalController = ModelController & {
-  MinInterval?: number;
-  MaxInterval?: number;
+export type ModelLipSyncItem = {
+  Id: string;
+  Min: number;
+  Max: number;
+  Input: 0;
 };
 
-export type ModelLipSyncController = ModelController & {
-  Gain?: number;
+export type ModelMouseTrackingItem = {
+  Id: string;
+  Min: number;
+  Max: number;
+  DefaultValue: number;
+  BlendMode: 1;
+  Axis?: 1;
+  Input: number;
+};
+
+export type ModelPartOpacityItem = {
+  Name: string;
+  Ids: string[];
+  Value: number;
+};
+
+export type ModelEmptyController = Record<string, never>;
+
+export type ModelParamHitController = {
+  Items: ModelParamHitItem[];
+  Enabled: boolean;
 };
 
 export type ModelKeyTriggerController = {
-  Enabled?: boolean;
-  Items?: ModelKeyTriggerItem[];
+  Items: ModelKeyTriggerItem[];
+  Enabled: boolean;
+};
+
+export type ModelEyeBlinkController = {
+  MinInterval: number;
+  MaxInterval: number;
+  Items: ModelEyeBlinkItem[];
+};
+
+export type ModelLipSyncController = {
+  Gain: number;
+  Items: ModelLipSyncItem[];
+};
+
+export type ModelMouseTrackingController = {
+  SmoothTime: number;
+  Items: ModelMouseTrackingItem[];
+  Enabled: boolean;
+};
+
+export type ModelPartOpacityController = {
+  Items: ModelPartOpacityItem[];
+  Enabled: boolean;
 };
 
 export type ModelArtmeshCullingController = {
-  DefaultMode?: number;
+  DefaultMode: 0;
 };
 
 export type ModelIntimacySystemController = {
-  MaxValue?: number;
-  BonusActive?: number;
+  MaxValue: number;
+  BonusActive: number;
 };
 
 export type ModelControllers = {
-  ParamHit?: ModelController;
-  ParamLoop?: ModelController;
-  KeyTrigger?: ModelKeyTriggerController;
-  ParamTrigger?: ModelController;
-  AreaTrigger?: ModelController;
-  HandTrigger?: ModelController;
-  EyeBlink?: ModelIntervalController;
-  LipSync?: ModelLipSyncController;
-  MouseTracking?: ModelController & {
-    SmoothTime?: number;
-  };
-  AutoBreath?: ModelController;
-  ExtraMotion?: ModelController;
-  Accelerometer?: ModelController;
-  Microphone?: ModelController;
-  Transform?: ModelController;
-  FaceTracking?: ModelController;
-  HandTracking?: ModelController;
-  ParamValue?: ModelController;
-  PartOpacity?: ModelController;
-  ArtmeshOpacity?: ModelController;
-  ArtmeshColor?: ModelController;
-  ArtmeshCulling?: ModelArtmeshCullingController;
-  IntimacySystem?: ModelIntimacySystemController;
+  ParamHit: ModelParamHitController;
+  ParamLoop: ModelEmptyController;
+  KeyTrigger: ModelKeyTriggerController;
+  ParamTrigger: ModelEmptyController;
+  AreaTrigger: ModelEmptyController;
+  HandTrigger: ModelEmptyController;
+  EyeBlink: ModelEyeBlinkController;
+  LipSync: ModelLipSyncController;
+  MouseTracking: ModelMouseTrackingController;
+  AutoBreath: ModelEmptyController;
+  ExtraMotion: ModelEmptyController;
+  Accelerometer: ModelEmptyController;
+  Microphone: ModelEmptyController;
+  Transform: ModelEmptyController;
+  FaceTracking: ModelEmptyController;
+  HandTracking: ModelEmptyController;
+  ParamValue: ModelEmptyController;
+  PartOpacity: ModelPartOpacityController;
+  ArtmeshOpacity: ModelEmptyController;
+  ArtmeshColor: ModelEmptyController;
+  ArtmeshCulling: ModelArtmeshCullingController;
+  IntimacySystem: ModelIntimacySystemController;
 };
 
 export type ModelOptions = {
-  ScaleFactor?: number;
-  AnisoLevel?: number;
-  PositionY?: number;
-  TexFixed?: boolean;
-  TexType?: number;
+  ScaleFactor: number;
+  AnisoLevel: number;
+  PositionY: number;
+  TexFixed: boolean;
+  TexType: number;
 };
 
 export type ModelSettings = {
-  Version: number;
-  Type?: number;
+  Version: 3;
+  Type: 0;
   FileReferences: ModelFileReferences;
-  HitAreas?: ModelHitArea[];
-  Controllers?: ModelControllers;
-  Options?: ModelOptions;
+  HitAreas: ModelHitArea[];
+  Controllers: ModelControllers;
+  Options: ModelOptions;
 };
 
 export async function loadModelSettings(
