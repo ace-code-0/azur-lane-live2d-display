@@ -8,7 +8,7 @@ import { MotionVariableStore } from './motionVariables';
 
 import type { Cubism4Model } from './model';
 import type { ModelDialogElement } from '../ui/modelDialog';
-import type { Motion, Settings } from './modelSettings';
+import type { MotionItem, Settings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
 const IDLE_STATE_GROUP_PATTERN = /^Idle(?:$|\d)/;
@@ -22,31 +22,31 @@ type TouchMotionState =
       status: 'loading';
       requestId: number;
       action: TouchAction;
-      motion: Motion;
+      motion: MotionItem;
     }
   | {
       status: 'playing';
       requestId: number;
       action: TouchAction;
-      motion: Motion;
+      motion: MotionItem;
     };
 
-type QueuedMotion = {
+type BufferedMotion = {
   group: string;
   index: number;
-  motion: Motion;
+  motion: MotionItem;
   priority: MotionPriority;
 };
 
-type MotionQueueState =
+type NextMotionBuffer =
   | {
       status: 'idle';
     }
   | {
       status: 'playing';
       requestId: number;
-      active: QueuedMotion;
-      remaining: QueuedMotion[];
+      activeMotion: BufferedMotion;
+      remainingMotions: BufferedMotion[];
       onComplete?: () => void;
     };
 
@@ -57,7 +57,7 @@ type MotionManagerState = {
 
 type MotionDebugState = {
   manager: MotionManagerState;
-  motion?: Motion;
+  motion?: MotionItem;
   motionVariables: Record<string, number>;
   touchMotionState: TouchMotionState;
 };
@@ -92,7 +92,7 @@ export function createMotionController(
   const motionVariables = new MotionVariableStore(modelSettings);
   const motionSelector = createMotionSelector(modelSettings, motionVariables);
   let touchMotionState: TouchMotionState = { status: 'idle' };
-  let motionQueueState: MotionQueueState = { status: 'idle' };
+  let nextMotionBuffer: NextMotionBuffer = { status: 'idle' };
   let leaveTimer: number | undefined;
   let idleRequestId = 0;
   let nextIdlePhase: 'state' | 'interlude' = 'state';
@@ -124,8 +124,8 @@ export function createMotionController(
       return;
     }
 
-    if (motionQueueState.status === 'playing') {
-      finishQueuedMotion(motionQueueState.requestId);
+    if (nextMotionBuffer.status === 'playing') {
+      finishQueuedMotion(nextMotionBuffer.requestId);
       return;
     }
 
@@ -279,7 +279,7 @@ export function createMotionController(
     return started;
   }
 
-  function selectIdleMotions(): QueuedMotion[] {
+  function selectIdleMotions(): BufferedMotion[] {
     if (nextIdlePhase === 'interlude') {
       return motionSelector.selectEachGroup(
         motionSelector.getGroupsByPattern(IDLE_INTERLUDE_GROUP_PATTERN),
@@ -297,8 +297,8 @@ export function createMotionController(
   function toNormalQueuedMotion(selected: {
     group: string;
     index: number;
-    motion: Motion;
-  }): QueuedMotion {
+    motion: MotionItem;
+  }): BufferedMotion {
     return {
       ...selected,
       priority: MotionPriority.NORMAL,
@@ -306,10 +306,10 @@ export function createMotionController(
   }
 
   async function startMotionQueue(
-    motions: QueuedMotion[],
+    motions: BufferedMotion[],
     onComplete?: () => void,
   ): Promise<boolean> {
-    if (motions.length === 0 || motionQueueState.status !== 'idle') {
+    if (motions.length === 0 || nextMotionBuffer.status !== 'idle') {
       return false;
     }
 
@@ -329,20 +329,20 @@ export function createMotionController(
   }
 
   async function startQueuedMotion(
-    active: QueuedMotion,
+    active: BufferedMotion,
     requestId: number,
-    remaining: QueuedMotion[],
+    remaining: BufferedMotion[],
     onComplete?: () => void,
   ): Promise<boolean> {
     modelSettingsBridge.applyMotionCommand(active.motion);
     motionVariables.applyAssignments(active.motion);
     showMotionDialog(active.motion);
 
-    motionQueueState = {
+    nextMotionBuffer = {
       status: 'playing',
       requestId,
-      active,
-      remaining,
+      activeMotion: active,
+      remainingMotions: remaining,
       onComplete,
     };
 
@@ -363,8 +363,8 @@ export function createMotionController(
         return false;
       });
 
-    if (!started && motionQueueState.status === 'playing') {
-      motionQueueState = { status: 'idle' };
+    if (!started && nextMotionBuffer.status === 'playing') {
+      nextMotionBuffer = { status: 'idle' };
     }
 
     if (started && debugTouch) {
@@ -380,24 +380,24 @@ export function createMotionController(
 
   function finishQueuedMotion(requestId: number): void {
     if (
-      motionQueueState.status !== 'playing' ||
-      motionQueueState.requestId !== requestId
+      nextMotionBuffer.status !== 'playing' ||
+      nextMotionBuffer.requestId !== requestId
     ) {
       return;
     }
 
-    const { active, remaining, onComplete } = motionQueueState;
+    const { activeMotion, remainingMotions, onComplete } = nextMotionBuffer;
 
-    modelSettingsBridge.applyMotionPostCommand(active.motion);
+    modelSettingsBridge.applyMotionPostCommand(activeMotion.motion);
 
-    if (remaining.length > 0) {
-      const [next, ...rest] = remaining;
+    if (remainingMotions.length > 0) {
+      const [next, ...rest] = remainingMotions;
 
       void startQueuedMotion(next, requestId, rest, onComplete);
       return;
     }
 
-    motionQueueState = { status: 'idle' };
+    nextMotionBuffer = { status: 'idle' };
     onComplete?.();
     requestIdleMotion();
   }
@@ -428,7 +428,7 @@ export function createMotionController(
   function tryRunPresetMotion(groupPrefix: string): boolean {
     const motions = motionSelector.selectPresetQueue(groupPrefix);
 
-    if (motions.length === 0 || motionQueueState.status !== 'idle') {
+    if (motions.length === 0 || nextMotionBuffer.status !== 'idle') {
       return false;
     }
 
@@ -467,7 +467,7 @@ export function createMotionController(
     runMotion(selected.group, selected.index, selected.motion);
   }
 
-  function runMotion(group: string, motionIndex: number, motion: Motion): void {
+  function runMotion(group: string, motionIndex: number, motion: MotionItem): void {
     modelSettingsBridge.applyMotionCommand(motion);
     motionVariables.applyAssignments(motion);
     showMotionDialog(motion);
@@ -496,7 +496,7 @@ export function createMotionController(
     schedulePostCommand(motion);
   }
 
-  function schedulePostCommand(motion: Motion): void {
+  function schedulePostCommand(motion: MotionItem): void {
     if (motion.MotionDuration === undefined) {
       modelSettingsBridge.applyMotionPostCommand(motion);
       return;
@@ -510,7 +510,7 @@ export function createMotionController(
   function playTouchMotion(action: TouchAction): void {
     if (
       touchMotionState.status !== 'idle' ||
-      motionQueueState.status !== 'idle'
+      nextMotionBuffer.status !== 'idle'
     ) {
       if (debugTouch) {
         console.log('[live2d-touch] request ignored', {
@@ -644,7 +644,7 @@ export function createMotionController(
   function scheduleTouchMotionFinish(
     requestId: number,
     action: TouchAction,
-    motion: Motion,
+    motion: MotionItem,
   ): void {
     if (motion.MotionDuration === undefined) {
       if (!motion.File) {
@@ -662,7 +662,7 @@ export function createMotionController(
   function finishTouchMotion(
     requestId: number,
     action: TouchAction,
-    motion: Motion,
+    motion: MotionItem,
   ): void {
     if (
       touchMotionState.status !== 'playing' ||
@@ -681,7 +681,7 @@ export function createMotionController(
     requestIdleMotion();
   }
 
-  function showMotionDialog(motion: Motion): void {
+  function showMotionDialog(motion: MotionItem): void {
     modelDialog.showMotion(motion, (choice) => {
       runReferencedMotion(choice.NextMtn);
     });
@@ -693,7 +693,7 @@ export function createMotionController(
     playPresetMotion(groupPrefix: string): boolean {
       if (
         touchMotionState.status !== 'idle' ||
-        motionQueueState.status !== 'idle'
+        nextMotionBuffer.status !== 'idle'
       ) {
         return false;
       }

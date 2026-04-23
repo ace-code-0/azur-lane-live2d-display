@@ -3,7 +3,7 @@ import {
   isExecutableModelMotion,
 } from './live2dEngineBridge';
 
-import type { Motion, Settings } from './modelSettings';
+import type { MotionItem, Settings } from './modelSettings';
 
 export type TouchAction = {
   hitArea: string;
@@ -45,7 +45,7 @@ function createTouchAction(
 }
 
 function getPlayableMotionIndex(
-  motions: Motion[],
+  motions: MotionItem[],
   motionName?: string,
 ): number | null | undefined {
   if (motionName !== undefined) {

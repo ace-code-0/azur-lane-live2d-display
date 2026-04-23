@@ -1,4 +1,4 @@
-import type { Motion, Settings } from './modelSettings';
+import type { MotionItem, Settings } from './modelSettings';
 
 const STORAGE_KEY = 'live2d.motionVariables';
 
@@ -16,7 +16,7 @@ export class MotionVariableStore {
     return Object.fromEntries(this.values);
   }
 
-  matches(motion: Motion): boolean {
+  matches(motion: MotionItem): boolean {
     return (
       motion.VarFloats?.every((variable) => {
         if (variable.Type !== 1) {
@@ -33,7 +33,7 @@ export class MotionVariableStore {
     );
   }
 
-  applyAssignments(motion: Motion): void {
+  applyAssignments(motion: MotionItem): void {
     let changed = false;
 
     for (const variable of motion.VarFloats ?? []) {

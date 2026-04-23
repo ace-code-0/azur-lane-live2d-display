@@ -11,7 +11,7 @@ export type Choice = {
   NextMtn: string;
 };
 
-export type Motion = {
+export type MotionItem = {
   Name: string;
   Sound?: string;
   File?: string;
@@ -28,7 +28,7 @@ export type Motion = {
   Enabled?: boolean;
 };
 
-// MotionGroups 有预定义部分，需要特殊处理，正则匹配group前缀
+// Motions 有预定义部分，需要特殊处理，正则匹配 group 前缀
 // Idle
 // Tap
 // TapArea
@@ -36,7 +36,7 @@ export type Motion = {
 // Shake
 // Tick
 // Leave
-export type MotionGroups = Record<string, Motion[]>;
+export type Motions = Record<string, MotionItem[]>;
 
 export type HitArea = {
   Name: string;
@@ -54,7 +54,7 @@ export type FileReferences = {
   Textures: string[];
   Physics: string;
   PhysicsV2: PhysicsV2;
-  Motions: MotionGroups;
+  Motions: Motions;
 };
 
 export type ParamHitItem = {

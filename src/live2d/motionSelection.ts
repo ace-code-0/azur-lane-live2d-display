@@ -3,13 +3,13 @@ import {
   isEnabledModelMotion,
   isExecutableModelMotion,
 } from './live2dEngineBridge';
-import type { Motion, Settings } from './modelSettings';
+import type { MotionItem, Settings } from './modelSettings';
 import type { MotionVariableStore } from './motionVariables';
 
 export type SelectedMotion = {
   group: string;
   index: number;
-  motion: Motion;
+  motion: MotionItem;
 };
 
 export function createMotionSelector(
@@ -23,7 +23,7 @@ export function createMotionSelector(
     );
   }
 
-  function getMotion(group: string, motionIndex: number): Motion {
+  function getMotion(group: string, motionIndex: number): MotionItem {
     const motion = getModelMotions(modelSettings, group)[motionIndex];
 
     if (!motion) {
@@ -120,7 +120,7 @@ export function createMotionSelector(
       : undefined;
   }
 
-  function isSelectable(motion: Motion): boolean {
+  function isSelectable(motion: MotionItem): boolean {
     return isExecutableModelMotion(motion) && motionVariables.matches(motion);
   }
 
@@ -153,7 +153,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function pickWeightedMotionIndex(motions: Motion[]): number | undefined {
+function pickWeightedMotionIndex(motions: MotionItem[]): number | undefined {
   if (motions.length === 0) {
     return undefined;
   }

@@ -1,6 +1,6 @@
 import { getModelMotions } from './live2dEngineBridge';
 
-import type { Motion, Settings } from './modelSettings';
+import type { MotionItem, Settings } from './modelSettings';
 
 type Motion3CurveTarget = 'Model' | 'Parameter' | 'PartOpacity';
 
@@ -45,7 +45,7 @@ export async function getMotion3ParameterTargetValue(
 function findReferencedMotion(
   settings: Settings,
   reference: string,
-): Motion | undefined {
+): MotionItem | undefined {
   const [group, motionName] = reference.split(':', 2);
   const motions = getModelMotions(settings, group);
 

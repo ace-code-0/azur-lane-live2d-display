@@ -1,6 +1,6 @@
 import { css, html, LitElement } from 'lit';
 
-import type { Choice, Motion } from '../live2d/modelSettings';
+import type { Choice, MotionItem } from '../live2d/modelSettings';
 
 const TEXT_BASE_DURATION_MS = 500;
 const TEXT_PER_CHARACTER_MS = 90;
@@ -94,7 +94,7 @@ export class ModelDialogElement extends LitElement {
   }
 
   showMotion(
-    motion: Motion,
+    motion: MotionItem,
     onChoice: (choice: Choice) => void,
   ): void {
     if (motion.Choices) {

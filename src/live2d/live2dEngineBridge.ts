@@ -5,12 +5,12 @@ export {
 } from 'untitled-pixi-live2d-engine/cubism';
 
 import type { Cubism4Model } from './model';
-import type { FileReferences, Motion, Settings } from './modelSettings';
+import type { FileReferences, MotionItem, Settings } from './modelSettings';
 
 export type ModelSettingsBridge = {
   applyInitialSettings(): void;
-  applyMotionCommand(motion: Motion): void;
-  applyMotionPostCommand(motion: Motion): void;
+  applyMotionCommand(motion: MotionItem): void;
+  applyMotionPostCommand(motion: MotionItem): void;
 };
 
 export type EngineModelSettings = Settings & {
@@ -48,9 +48,9 @@ type AutomatorAdapter = {
 export function getModelMotions(
   settings: Settings,
   group: string,
-): Motion[] {
+): MotionItem[] {
   const motions = settings.FileReferences.Motions as Partial<
-    Record<string, Motion[]>
+    Record<string, MotionItem[]>
   >;
   const groupMotions = motions[group];
 
@@ -84,7 +84,7 @@ export function createEngineModelSettings(
   };
 }
 
-export function isExecutableModelMotion(motion: Motion): boolean {
+export function isExecutableModelMotion(motion: MotionItem): boolean {
   return (
     isEnabledModelMotion(motion) &&
     (motion.File !== undefined ||
@@ -95,7 +95,7 @@ export function isExecutableModelMotion(motion: Motion): boolean {
   );
 }
 
-export function isEnabledModelMotion(motion: Motion): boolean {
+export function isEnabledModelMotion(motion: MotionItem): boolean {
   return motion.Enabled !== false;
 }
 
@@ -212,11 +212,11 @@ export function createModelSettingsBridge(
       applyPartOpacitySettings(model, settings);
     },
 
-    applyMotionCommand(motion: Motion): void {
+    applyMotionCommand(motion: MotionItem): void {
       applyCommand(motion.Command);
     },
 
-    applyMotionPostCommand(motion: Motion): void {
+    applyMotionPostCommand(motion: MotionItem): void {
       applyCommand(motion.PostCommand);
     },
   };
