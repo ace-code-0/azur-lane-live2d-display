@@ -532,7 +532,7 @@
           "Name": "Paramtouch_idle1",
           "Id": "Paramtouch_idle1",
           "HitArea": "TouchIdle1_胖次系带_进入场景2",
-          "Axis": 0,
+          "Axis": 1,
           "Factor": -0.1,
           "ReleaseType": 0,
           "MaxMtn": "TouchIdle1"
