@@ -9,8 +9,8 @@ export async function createApplication(
   await app.init({
     preference: 'webgl',
     resizeTo: window,
-    autoDensity: false,
-    resolution: 1,
+    autoDensity: true,
+    resolution: window.devicePixelRatio | 1,
     backgroundAlpha: 0,
     antialias: true,
   });
