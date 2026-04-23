@@ -5,9 +5,9 @@ import type { Cubism4Model } from './model';
 import type { TouchAction } from './touchActions';
 
 type MotionController = {
-  playPresetMotion(groupPrefix: string): boolean;
+  startPresetMotionCycle(groupPrefix: string): boolean;
   playTouchMotion(action: TouchAction): void;
-  startIdleMotion(): void;
+  requestIdleMotionCycle(): void;
 };
 
 type TouchInteractionOptions = {
@@ -56,7 +56,7 @@ export function installTouchInteractions(
 
     if (
       hitAreas.length > 0 &&
-      motionController.playPresetMotion('TapArea')
+      motionController.startPresetMotionCycle('TapArea')
     ) {
       return;
     }
@@ -71,7 +71,7 @@ export function installTouchInteractions(
         return;
       }
 
-      if (!motionController.playPresetMotion('Tap')) {
+      if (!motionController.startPresetMotionCycle('Tap')) {
         motionController.playTouchMotion(getBackgroundTouchAction());
       }
     }

@@ -11,7 +11,7 @@ const DRAG_DISTANCE_THRESHOLD = 8;
 const TAP_SUPPRESSION_MS = 250;
 
 type MotionController = {
-  startMotion(reference: string): void;
+  startReferencedMotion(reference: string): void;
 };
 
 type ParamHitTarget = {
@@ -134,7 +134,7 @@ export async function installParamHitInteractions(
     }
 
     setModelParameter(model, state.target.item.Id, state.target.targetValue);
-    motionController.startMotion(state.target.item.MaxMtn);
+    motionController.startReferencedMotion(state.target.item.MaxMtn);
 
     if (debugTouch) {
       console.log('[live2d-param-hit] complete', {

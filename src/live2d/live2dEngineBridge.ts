@@ -23,7 +23,7 @@ export type EngineModelSettings = Settings & {
 };
 
 type BridgeCallbacks = {
-  startMotion(reference: string): void;
+  startReferencedMotion(reference: string): void;
 };
 
 type CoreModelAdapter = {
@@ -164,7 +164,7 @@ export function createModelSettingsBridge(
       }
 
       if (namespace === 'start_mtn') {
-        callbacks.startMotion(action);
+        callbacks.startReferencedMotion(action);
         continue;
       }
 

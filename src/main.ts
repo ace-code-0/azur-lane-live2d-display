@@ -72,7 +72,7 @@ async function bootstrap(): Promise<void> {
 
       for (const item of modelSettings.Controllers.KeyTrigger.Items) {
         if (event.keyCode === item.Input) {
-          motionController.startMotion(item.DownMtn);
+          motionController.startReferencedMotion(item.DownMtn);
         }
       }
     });
@@ -82,7 +82,7 @@ async function bootstrap(): Promise<void> {
     updateStageHitArea(app);
     fitModel(app, model, modelSettings.Options);
   });
-  motionController.startInitialMotion();
+  motionController.startDefaultMotionCycle();
 }
 
 bootstrap().catch((error: unknown) => {
