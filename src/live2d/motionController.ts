@@ -32,6 +32,22 @@ type MotionManagerState = {
   currentIndex?: number;
 };
 
+type MotionDebugState = {
+  manager: MotionManagerState;
+  motion?: ModelMotion;
+  motionVariables: Record<string, number>;
+  touchMotionState: TouchMotionState;
+};
+
+type MotionDebugWindow = Window &
+  typeof globalThis & {
+    live2dDebug?: {
+      getState(): MotionDebugState;
+      startIdleMotion(): void;
+      startMotion(reference: string): void;
+    };
+  };
+
 export type MotionController = {
   playTouchMotion(action: TouchAction): void;
   startIdleMotion(): void;
@@ -60,6 +76,10 @@ export function createMotionController(
     },
   });
   modelSettingsBridge.applyInitialSettings();
+
+  if (debugTouch) {
+    installMotionDebugControls();
+  }
 
   motionManager.on('motionFinish', () => {
     const finishedMotion = getCurrentMotion();
@@ -92,6 +112,40 @@ export function createMotionController(
     return {
       group: state.currentGroup,
       index: state.currentIndex,
+    };
+  }
+
+  function getMotionDebugState(): MotionDebugState {
+    const currentMotion = getCurrentMotion();
+    const motion =
+      currentMotion.group !== undefined && currentMotion.index !== undefined
+        ? getModelMotions(modelSettings, currentMotion.group)[
+            currentMotion.index
+          ]
+        : undefined;
+
+    return {
+      manager: {
+        currentGroup: currentMotion.group,
+        currentIndex: currentMotion.index,
+      },
+      motion,
+      motionVariables: Object.fromEntries(motionVariables),
+      touchMotionState,
+    };
+  }
+
+  function installMotionDebugControls(): void {
+    (window as MotionDebugWindow).live2dDebug = {
+      getState: getMotionDebugState,
+
+      startIdleMotion(): void {
+        void startIdleMotion();
+      },
+
+      startMotion(reference: string): void {
+        runReferencedMotion(reference);
+      },
     };
   }
 
