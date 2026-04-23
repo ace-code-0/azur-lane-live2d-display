@@ -1,4 +1,5 @@
 import { getModelMotions } from './live2dEngineBridge';
+import { parseMotionReference } from './motionReference';
 
 import type { MotionItem, Settings } from './modelSettings';
 
@@ -46,7 +47,7 @@ function findReferencedMotion(
   settings: Settings,
   reference: string,
 ): MotionItem | undefined {
-  const [group, motionName] = reference.split(':', 2);
+  const { group, motionName } = parseMotionReference(reference);
   const motions = getModelMotions(settings, group);
 
   if (motionName !== undefined) {

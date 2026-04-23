@@ -2,6 +2,7 @@ import {
   getModelMotions,
   isExecutableModelMotion,
 } from './live2dEngineBridge';
+import { parseMotionReference } from './motionReference';
 
 import type { MotionItem, Settings } from './modelSettings';
 
@@ -32,7 +33,7 @@ function createTouchAction(
   motion: string,
   settings: Settings,
 ): TouchAction {
-  const [group, motionName] = motion.split(':', 2);
+  const { group, motionName } = parseMotionReference(motion);
   const motions = getModelMotions(settings, group);
   const motionIndex = getPlayableMotionIndex(motions, motionName);
 

@@ -1,3 +1,5 @@
+import { sanitizeModelSettingsAssetPaths } from './modelAssetPath';
+
 export type VarFloats = {
   // 变量名
   Name: string;
@@ -28,7 +30,7 @@ export type MotionItem = {
   Enabled?: boolean;
 };
 
-// Motions 有预定义部分，需要特殊处理，正则匹配 group 前缀
+// Motions 有预定义部分，需要特殊处理，正则匹配 group 前缀，每个预定义 Motion 周期，要执行其中的每个 Motion
 // Idle
 // Tap
 // TapArea
@@ -204,5 +206,5 @@ export async function loadModelSettings(modelUrl: string): Promise<Settings> {
     throw new Error(`Failed to load model settings: ${response.status}`);
   }
 
-  return (await response.json()) as Settings;
+  return sanitizeModelSettingsAssetPaths((await response.json()) as Settings);
 }

@@ -3,17 +3,31 @@ import {
   getModelMotions,
   MotionPriority,
 } from './live2dEngineBridge';
-import { createMotionSelector } from './motionSelection';
+import {
+  createMotionSelector,
+  parseSelectedMotionReference,
+} from './motionSelection';
+import { createMotionReference } from './motionReference';
 import { MotionVariableStore } from './motionVariables';
 
 import type { Cubism4Model } from './model';
 import type { ModelDialogElement } from '../ui/modelDialog';
 import type { MotionItem, Settings } from './modelSettings';
 import type { TouchAction } from './touchActions';
+import type { SelectedMotion } from './motionSelection';
 
 const IDLE_MOTION_PREFIX = 'Idle';
 const START_MOTION_PREFIX = 'Start';
 const LEAVE_MOTION_PREFIX = 'Leave';
+const PRESET_MOTION_PREFIXES = [
+  IDLE_MOTION_PREFIX,
+  'Tap',
+  'TapArea',
+  START_MOTION_PREFIX,
+  'Shake',
+  'Tick',
+  LEAVE_MOTION_PREFIX,
+] as const;
 
 type TouchMotionState =
   | {
@@ -32,50 +46,54 @@ type TouchMotionState =
       motion: MotionItem;
     };
 
-type BufferedMotion = {
-  group: string;
-  index: number;
-  motion: MotionItem;
+type ActiveMotion = {
+  selectedMotion: SelectedMotion;
   priority: MotionPriority;
 };
 
-type PresetMotionQueueState =
-  | {
-      status: 'idle';
-    }
-  | {
-      status: 'playing';
-      requestId: number;
-      activeMotion: BufferedMotion;
-      remainingMotions: BufferedMotion[];
-      onComplete?: () => void;
-    };
-
-type MotionManagerState = {
-  currentGroup?: string;
-  currentIndex?: number;
+type PresetMotionBufferState = {
+  requestId?: number;
+  presetPrefix?: string;
+  cycleGroup?: string;
+  active?: ActiveMotion;
+  buffer: ActiveMotion[];
 };
 
 type MotionDebugState = {
-  manager: MotionManagerState;
-  motion?: MotionItem;
   motionVariables: Record<string, number>;
   pendingIdleRequestId: number;
-  presetMotionQueue: {
-    status: PresetMotionQueueState['status'];
+  presetMotionBuffer: {
+    presetPrefix?: string;
     activeMotion?: {
-      group: string;
-      index: number;
-      motionName: string;
+      presetPrefix: string;
+      motionGroup: string;
+      motionItemName: string;
+      motionReference: string;
       priority: MotionPriority;
     };
-    remainingMotions: Array<{
-      group: string;
-      index: number;
-      motionName: string;
+    buffer: Array<{
+      presetPrefix: string;
+      motionGroup: string;
+      motionItemName: string;
+      motionReference: string;
       priority: MotionPriority;
     }>;
   };
+  presetCycles: Record<
+    string,
+    {
+      cursor: number;
+      motionGroups: Array<{
+        group: string;
+        cursor: number;
+        motions: Array<{
+          name: string;
+          reference: string;
+          selectable: boolean;
+        }>;
+      }>;
+    }
+  >;
   touchMotionState: TouchMotionState;
 };
 
@@ -108,8 +126,12 @@ export function createMotionController(
   const internalModel = model.internalModel;
   const motionVariables = new MotionVariableStore(modelSettings);
   const motionSelector = createMotionSelector(modelSettings, motionVariables);
+  const presetGroupsByPrefix = createPresetGroupsByPrefix();
+  const presetReferencesByGroup = createPresetReferencesByGroup();
+  const presetFamilyCursorByPrefix = createPresetFamilyCursorByPrefix();
+  const presetCycleCursorByGroup = createPresetCycleCursorByGroup();
   let touchMotionState: TouchMotionState = { status: 'idle' };
-  let presetMotionQueueState: PresetMotionQueueState = { status: 'idle' };
+  let presetMotionBufferState: PresetMotionBufferState = { buffer: [] };
   let leaveTimer: number | undefined;
   let idleRequestId = 0;
   let nextRequestId = 1;
@@ -130,6 +152,8 @@ export function createMotionController(
     installMotionDebugControls();
   }
 
+  resetIdlePresetMotionBuffer();
+
   motionManager.on('motionFinish', () => {
     if (touchMotionState.status === 'playing') {
       finishTouchMotion(
@@ -140,72 +164,67 @@ export function createMotionController(
       return;
     }
 
-    if (presetMotionQueueState.status === 'playing') {
-      finishQueuedMotion(presetMotionQueueState.requestId);
+    if (presetMotionBufferState.active && presetMotionBufferState.requestId !== undefined) {
+      advancePresetMotionBuffer(presetMotionBufferState.requestId);
       return;
     }
 
     requestIdleMotion();
   });
 
-  function getCurrentMotion(): { group?: string; index?: number } {
-    const state = motionManager.state as MotionManagerState;
-
-    return {
-      group: state.currentGroup,
-      index: state.currentIndex,
-    };
-  }
-
   function getMotionDebugState(): MotionDebugState {
-    const currentMotion = getCurrentMotion();
-    const motion =
-      currentMotion.group !== undefined && currentMotion.index !== undefined
-        ? getModelMotions(modelSettings, currentMotion.group)[
-            currentMotion.index
-          ]
-        : undefined;
-    const presetMotionQueue =
-      presetMotionQueueState.status === 'playing'
-        ? {
-            status: presetMotionQueueState.status,
-            activeMotion: toQueuedMotionDebugItem(
-              presetMotionQueueState.activeMotion,
-            ),
-            remainingMotions: presetMotionQueueState.remainingMotions.map(
-              toQueuedMotionDebugItem,
-            ),
-          }
-        : {
-            status: presetMotionQueueState.status,
-            remainingMotions: [],
-          };
-
     return {
-      manager: {
-        currentGroup: currentMotion.group,
-        currentIndex: currentMotion.index,
-      },
-      motion,
       motionVariables: motionVariables.entries(),
       pendingIdleRequestId: idleRequestId,
-      presetMotionQueue,
+      presetMotionBuffer: {
+        presetPrefix: presetMotionBufferState.presetPrefix,
+        activeMotion:
+          presetMotionBufferState.active === undefined
+            ? undefined
+            : toQueuedMotionDebugItem(presetMotionBufferState.active),
+        buffer: presetMotionBufferState.buffer.map(toQueuedMotionDebugItem),
+      },
+      presetCycles: Object.fromEntries(
+        PRESET_MOTION_PREFIXES.map((prefix) => [
+          prefix,
+          {
+            cursor: presetFamilyCursorByPrefix[prefix] ?? 0,
+            motionGroups: (presetGroupsByPrefix[prefix] ?? []).map((group) => ({
+              group,
+              cursor: presetCycleCursorByGroup[group] ?? 0,
+              motions: buildPresetMotionDebugItems(group),
+            })),
+          },
+        ]),
+      ),
       touchMotionState,
     };
   }
 
-  function toQueuedMotionDebugItem(motion: BufferedMotion): {
-    group: string;
-    index: number;
-    motionName: string;
+  function toQueuedMotionDebugItem(motion: ActiveMotion): {
+    presetPrefix: string;
+    motionGroup: string;
+    motionItemName: string;
+    motionReference: string;
     priority: MotionPriority;
   } {
+    const { group } = parseSelectedMotionReference(
+      motion.selectedMotion.reference,
+    );
+
     return {
-      group: motion.group,
-      index: motion.index,
-      motionName: motion.motion.Name,
+      presetPrefix:
+        motion.selectedMotion.presetPrefix ??
+        getPresetPrefixFromReference(motion.selectedMotion.reference),
+      motionGroup: group,
+      motionItemName: motion.selectedMotion.motion.Name,
+      motionReference: motion.selectedMotion.reference,
       priority: motion.priority,
     };
+  }
+
+  function getPresetPrefixFromReference(reference: string): string {
+    return parseSelectedMotionReference(reference).group.match(/^[A-Za-z]+/)?.[0] ?? reference;
   }
 
   function installMotionDebugControls(): void {
@@ -231,7 +250,7 @@ export function createMotionController(
   }
 
   function startDefaultMotionCycle(): void {
-    if (!tryRunPresetMotion(START_MOTION_PREFIX)) {
+    if (!startPresetMotionCycle(START_MOTION_PREFIX)) {
       requestIdleMotion();
     }
 
@@ -257,7 +276,7 @@ export function createMotionController(
       leaveTimer = undefined;
 
       if (touchMotionState.status === 'idle') {
-        tryRunPresetMotion(LEAVE_MOTION_PREFIX);
+        startPresetMotionCycle(LEAVE_MOTION_PREFIX);
       }
 
       resetLeaveTimer();
@@ -285,19 +304,17 @@ export function createMotionController(
     const requestId = ++idleRequestId;
 
     window.setTimeout(() => {
-      void tryStartQueuedIdleMotion(requestId);
+      void tryStartIdleMotionCycle(requestId);
     }, 0);
   }
 
-  async function tryStartQueuedIdleMotion(requestId: number): Promise<void> {
+  async function tryStartIdleMotionCycle(requestId: number): Promise<void> {
     if (requestId !== idleRequestId || touchMotionState.status !== 'idle') {
       return;
     }
 
-    const started = await startPresetMotionCycle(
-      IDLE_MOTION_PREFIX,
-      MotionPriority.IDLE,
-    );
+    resetIdlePresetMotionBuffer();
+    const started = await startBufferedPresetMotion();
 
     if (!started && debugTouch && requestId === idleRequestId) {
       console.log('[live2d-motion] idle not started', {
@@ -306,58 +323,163 @@ export function createMotionController(
     }
   }
 
-  async function startPresetMotionCycle(
-    groupPrefix: string,
-    priority: MotionPriority,
-  ): Promise<boolean> {
-    const motions = motionSelector.selectPresetQueue(groupPrefix).map((motion) => ({
-      ...motion,
-      priority,
-    }));
+  function createPresetGroupsByPrefix(): Record<string, string[]> {
+    const groupsByPrefix: Record<string, string[]> = {};
 
-    if (motions.length === 0) {
-      if (debugTouch) {
-        console.log('[live2d-motion] preset skipped', {
-          groupPrefix,
-          variables: motionVariables.entries(),
-        });
-      }
-
-      return false;
+    for (const prefix of PRESET_MOTION_PREFIXES) {
+      groupsByPrefix[prefix] = motionSelector.getPresetGroups(prefix);
     }
 
-    const started = await startMotionQueue(motions);
-
-    return started;
+    return groupsByPrefix;
   }
 
-  function toNormalQueuedMotion(selected: {
-    group: string;
-    index: number;
-    motion: MotionItem;
-  }): BufferedMotion {
+  function createPresetReferencesByGroup(): Record<string, string[]> {
+    const referencesByGroup: Record<string, string[]> = {};
+
+    for (const groups of Object.values(presetGroupsByPrefix)) {
+      for (const group of groups) {
+        referencesByGroup[group] = buildPresetReferenceQueue(group);
+      }
+    }
+
+    return referencesByGroup;
+  }
+
+  function createPresetFamilyCursorByPrefix(): Record<string, number> {
+    return Object.fromEntries(
+      PRESET_MOTION_PREFIXES.map((prefix) => [prefix, 0]),
+    );
+  }
+
+  function createPresetCycleCursorByGroup(): Record<string, number> {
+    return Object.fromEntries(
+      Object.values(presetGroupsByPrefix)
+        .flatMap((groups) => groups)
+        .map((group) => [group, 0]),
+    );
+  }
+
+  function buildPresetReferenceQueue(group: string): string[] {
+    return getModelMotions(modelSettings, group).map((motion, index) => {
+      const motionName = motion.Name || String(index);
+      return createMotionReference(group, motionName);
+    });
+  }
+
+  function buildPresetMotionDebugItems(group: string): Array<{
+    name: string;
+    reference: string;
+    selectable: boolean;
+  }> {
+    return getModelMotions(modelSettings, group).map((motion, index) => {
+      const name = motion.Name || String(index);
+      const reference = createMotionReference(group, name);
+
+      return {
+        name,
+        reference,
+        selectable: motionSelector.selectReference(reference) !== undefined,
+      };
+    });
+  }
+
+  function selectPresetCycleFromCursor(
+    groupPrefix: string,
+    priority: MotionPriority,
+  ): { cycleGroup?: string; motions: ActiveMotion[] } {
+    const groups = presetGroupsByPrefix[groupPrefix] ?? [];
+
+    if (groups.length === 0) {
+      return { motions: [] };
+    }
+
+    const familyCursor = presetFamilyCursorByPrefix[groupPrefix] ?? 0;
+    const orderedGroups = [
+      ...groups.slice(familyCursor),
+      ...groups.slice(0, familyCursor),
+    ];
+
+    const cycleSelections = orderedGroups.map((group) =>
+      selectPresetCycleGroup(group, priority),
+    );
+    const firstSelectableCycle = cycleSelections.find(
+      ({ motions }) => motions.length > 0,
+    );
+
+    if (!firstSelectableCycle) {
+      return { motions: [] };
+    }
+
     return {
-      ...selected,
-      priority: MotionPriority.NORMAL,
+      cycleGroup: firstSelectableCycle.group,
+      motions: cycleSelections.flatMap(({ motions }) => motions),
     };
   }
 
-  async function startMotionQueue(
-    motions: BufferedMotion[],
-    onComplete?: () => void,
-  ): Promise<boolean> {
-    if (motions.length === 0 || presetMotionQueueState.status !== 'idle') {
+  function selectPresetCycleGroup(
+    group: string,
+    priority: MotionPriority,
+  ): { group: string; motions: ActiveMotion[] } {
+    const references = presetReferencesByGroup[group] ?? [];
+
+    if (references.length === 0) {
+      return { group, motions: [] };
+    }
+
+    const cycleCursor = presetCycleCursorByGroup[group] ?? 0;
+    const orderedReferences = [
+      ...references.slice(cycleCursor),
+      ...references.slice(0, cycleCursor),
+    ];
+    const selectedMotion = orderedReferences.reduce<SelectedMotion | undefined>(
+      (selected, reference) =>
+        selected ?? motionSelector.selectReference(reference),
+      undefined,
+    );
+
+    return {
+      group,
+      motions:
+        selectedMotion === undefined ? [] : [{ selectedMotion, priority }],
+    };
+  }
+
+  function resetPresetMotionBuffer(
+    groupPrefix: string,
+    priority: MotionPriority,
+  ): void {
+    const { cycleGroup, motions } = selectPresetCycleFromCursor(
+      groupPrefix,
+      priority,
+    );
+    const [active, ...buffer] = motions;
+
+    presetMotionBufferState = {
+      requestId: active ? nextRequestId++ : undefined,
+      presetPrefix: active ? groupPrefix : undefined,
+      cycleGroup: active ? cycleGroup : undefined,
+      active,
+      buffer,
+    };
+  }
+
+  function resetIdlePresetMotionBuffer(): void {
+    resetPresetMotionBuffer(IDLE_MOTION_PREFIX, MotionPriority.IDLE);
+  }
+
+  async function startBufferedPresetMotion(): Promise<boolean> {
+    if (!presetMotionBufferState.active || presetMotionBufferState.requestId === undefined) {
       return false;
     }
 
-    const [active, ...remaining] = motions;
-    const requestId = nextRequestId++;
-    const started = await startQueuedMotion(active, requestId, remaining, onComplete);
+    const started = await playPresetMotionBufferItem(
+      presetMotionBufferState.active,
+      presetMotionBufferState.requestId,
+    );
 
     if (!started && debugTouch) {
       console.log('[live2d-motion] queued motion rejected', {
-        group: active.group,
-        motionIndex: active.index,
+        reference: presetMotionBufferState.active.selectedMotion.reference,
         variables: motionVariables.entries(),
       });
     }
@@ -365,49 +487,41 @@ export function createMotionController(
     return started;
   }
 
-  async function startQueuedMotion(
-    active: BufferedMotion,
+  async function playPresetMotionBufferItem(
+    active: ActiveMotion,
     requestId: number,
-    remaining: BufferedMotion[],
-    onComplete?: () => void,
   ): Promise<boolean> {
-    modelSettingsBridge.applyMotionCommand(active.motion);
-    motionVariables.applyAssignments(active.motion);
-    showMotionDialog(active.motion);
+    const motion = active.selectedMotion.motion;
 
-    presetMotionQueueState = {
-      status: 'playing',
-      requestId,
-      activeMotion: active,
-      remainingMotions: remaining,
-      onComplete,
-    };
+    modelSettingsBridge.applyMotionCommand(motion);
+    motionVariables.applyAssignments(motion);
+    showMotionDialog(motion);
 
-    if (!active.motion.File) {
-      finishQueuedMotion(requestId);
+    presetMotionBufferState.active = active;
+    presetMotionBufferState.requestId = requestId;
+
+    if (!motion.File) {
+      advancePresetMotionBuffer(requestId);
       return true;
     }
 
-    const started = await model
-      .motion(active.group, active.index, active.priority)
+    const started = await startEngineMotion(active)
       .catch((error: unknown) => {
         console.error('[live2d-motion] queued motion failed', {
-          group: active.group,
-          motionIndex: active.index,
+          reference: active.selectedMotion.reference,
           error,
         });
 
         return false;
       });
 
-    if (!started && presetMotionQueueState.status === 'playing') {
-      presetMotionQueueState = { status: 'idle' };
+    if (!started && presetMotionBufferState.requestId === requestId) {
+      handlePresetMotionStartRejected(requestId);
     }
 
     if (started && debugTouch) {
       console.log('[live2d-motion] queued motion playing', {
-        group: active.group,
-        motionIndex: active.index,
+        reference: active.selectedMotion.reference,
         variables: motionVariables.entries(),
       });
     }
@@ -415,75 +529,208 @@ export function createMotionController(
     return started;
   }
 
-  function finishQueuedMotion(requestId: number): void {
+  async function startEngineMotion(active: ActiveMotion): Promise<boolean> {
+    const locator = resolveEngineMotionLocator(active.selectedMotion.reference);
+
+    return model.motion(locator.group, locator.index, active.priority);
+  }
+
+  function resolveEngineMotionLocator(reference: string): {
+    group: string;
+    index: number;
+  } {
+    const { group, motionName } = parseSelectedMotionReference(reference);
+
+    if (motionName === undefined) {
+      throw new Error(`Motion reference is missing motion name: ${reference}`);
+    }
+
+    const index = getModelMotions(modelSettings, group).findIndex(
+      ({ Name }) => Name === motionName,
+    );
+
+    if (index < 0) {
+      throw new Error(`Motion not found in ${group}: ${motionName}`);
+    }
+
+    return { group, index };
+  }
+
+  function advancePresetMotionBuffer(requestId: number): void {
     if (
-      presetMotionQueueState.status !== 'playing' ||
-      presetMotionQueueState.requestId !== requestId
+      presetMotionBufferState.active === undefined ||
+      presetMotionBufferState.requestId !== requestId
     ) {
       return;
     }
 
-    const { activeMotion, remainingMotions, onComplete } = presetMotionQueueState;
+    const { active, buffer, presetPrefix, cycleGroup } = presetMotionBufferState;
+    const completedReference = active.selectedMotion.reference;
 
-    modelSettingsBridge.applyMotionPostCommand(activeMotion.motion);
+    modelSettingsBridge.applyMotionPostCommand(active.selectedMotion.motion);
+    advancePresetCycleCursor(cycleGroup, completedReference);
 
-    if (remainingMotions.length > 0) {
-      const [next, ...rest] = remainingMotions;
-
-      void startQueuedMotion(next, requestId, rest, onComplete);
+    if (buffer.length > 0) {
+      refillPresetMotionBuffer(presetPrefix, active.priority, requestId);
+      if (presetMotionBufferState.active) {
+        void playPresetMotionBufferItem(
+          presetMotionBufferState.active,
+          requestId,
+        );
+      }
       return;
     }
 
-    presetMotionQueueState = { status: 'idle' };
-    onComplete?.();
+    advancePresetFamilyCursor(presetPrefix, cycleGroup);
+    presetMotionBufferState.active = undefined;
+
+    if (presetPrefix === IDLE_MOTION_PREFIX) {
+      resetIdlePresetMotionBuffer();
+      if (presetMotionBufferState.active && presetMotionBufferState.requestId !== undefined) {
+        void playPresetMotionBufferItem(
+          presetMotionBufferState.active,
+          presetMotionBufferState.requestId,
+        );
+      }
+      return;
+    }
+
+    resetIdlePresetMotionBuffer();
     requestIdleMotion();
   }
 
-  function getPresetMotionGroups(groupPrefix: string): string[] {
-    return motionSelector.getPresetGroups(groupPrefix);
-  }
-
-  function tryRunReferencedMotion(reference: string): boolean {
-    const selected = motionSelector.selectReference(reference);
-
-    if (!selected) {
-      return false;
-    }
-
-    runMotion(selected.group, selected.index, selected.motion);
-    return true;
-  }
-
-  function tryRunPresetMotion(groupPrefix: string): boolean {
-    const motions = motionSelector.selectPresetQueue(groupPrefix);
-
-    if (motions.length === 0 || presetMotionQueueState.status !== 'idle') {
-      return false;
-    }
-
-    void startMotionQueue(motions.map(toNormalQueuedMotion));
-    return true;
-  }
-
-  function tryRunMotionGroup(group: string): boolean {
-    const selected = motionSelector.selectGroup(group);
-
-    if (!selected) {
-      return false;
-    }
-
-    runMotion(selected.group, selected.index, selected.motion);
-    return true;
-  }
-
-  function runMotionGroup(group: string, motionIndex: number): void {
-    const motion = motionSelector.getMotion(group, motionIndex);
-
-    if (!motionVariables.matches(motion)) {
+  function handlePresetMotionStartRejected(requestId: number): void {
+    if (
+      presetMotionBufferState.requestId !== requestId ||
+      presetMotionBufferState.presetPrefix === undefined
+    ) {
       return;
     }
 
-    runMotion(group, motionIndex, motion);
+    if (presetMotionBufferState.buffer.length > 0) {
+      const [next, ...rest] = presetMotionBufferState.buffer;
+      presetMotionBufferState.active = next;
+      presetMotionBufferState.buffer = rest;
+      void playPresetMotionBufferItem(next, requestId);
+      return;
+    }
+
+    advancePresetFamilyCursor(
+      presetMotionBufferState.presetPrefix,
+      presetMotionBufferState.cycleGroup,
+    );
+
+    if (presetMotionBufferState.presetPrefix === IDLE_MOTION_PREFIX) {
+      resetIdlePresetMotionBuffer();
+      if (
+        presetMotionBufferState.active !== undefined &&
+        presetMotionBufferState.requestId !== undefined
+      ) {
+        void playPresetMotionBufferItem(
+          presetMotionBufferState.active,
+          presetMotionBufferState.requestId,
+        );
+      }
+      return;
+    }
+
+    presetMotionBufferState = { buffer: [] };
+    resetIdlePresetMotionBuffer();
+    requestIdleMotion();
+  }
+
+  function refillPresetMotionBuffer(
+    groupPrefix: string | undefined,
+    priority: MotionPriority,
+    requestId: number,
+  ): void {
+    if (!groupPrefix) {
+      presetMotionBufferState.active = undefined;
+      presetMotionBufferState.buffer = [];
+      return;
+    }
+
+    const { cycleGroup, motions } = selectPresetCycleFromCursor(
+      groupPrefix,
+      priority,
+    );
+    const [active, ...buffer] = motions;
+    presetMotionBufferState.presetPrefix = groupPrefix;
+    presetMotionBufferState.cycleGroup = active ? cycleGroup : undefined;
+    presetMotionBufferState.requestId = requestId;
+    presetMotionBufferState.active = active;
+    presetMotionBufferState.buffer = buffer;
+  }
+
+  function advancePresetCycleCursor(
+    cycleGroup: string | undefined,
+    completedReference: string,
+  ): void {
+    if (!cycleGroup) {
+      return;
+    }
+
+    const references = presetReferencesByGroup[cycleGroup] ?? [];
+
+    if (references.length === 0) {
+      presetCycleCursorByGroup[cycleGroup] = 0;
+      return;
+    }
+
+    const completedIndex = references.indexOf(completedReference);
+
+    if (completedIndex < 0) {
+      return;
+    }
+
+    presetCycleCursorByGroup[cycleGroup] =
+      (completedIndex + 1) % references.length;
+  }
+
+  function getPresetMotionGroups(groupPrefix: string): string[] {
+    return presetGroupsByPrefix[groupPrefix] ?? [];
+  }
+
+  function advancePresetFamilyCursor(
+    groupPrefix: string | undefined,
+    completedGroup: string | undefined,
+  ): void {
+    if (!groupPrefix || !completedGroup) {
+      return;
+    }
+
+    const groups = presetGroupsByPrefix[groupPrefix] ?? [];
+
+    if (groups.length === 0) {
+      presetFamilyCursorByPrefix[groupPrefix] = 0;
+      return;
+    }
+
+    const completedIndex = groups.indexOf(completedGroup);
+
+    if (completedIndex < 0) {
+      return;
+    }
+
+    presetFamilyCursorByPrefix[groupPrefix] =
+      (completedIndex + 1) % groups.length;
+  }
+
+  function startPresetMotionCycle(groupPrefix: string): boolean {
+    if (
+      touchMotionState.status !== 'idle' ||
+      presetMotionBufferState.active !== undefined
+    ) {
+      return false;
+    }
+
+    resetPresetMotionBuffer(groupPrefix, MotionPriority.NORMAL);
+    if (!presetMotionBufferState.active) {
+      return false;
+    }
+
+    void startBufferedPresetMotion();
+    return true;
   }
 
   function startReferencedMotion(reference: string): void {
@@ -493,17 +740,23 @@ export function createMotionController(
       return;
     }
 
-    runMotion(selected.group, selected.index, selected.motion);
+    playReferencedMotion(selected);
   }
 
-  function runMotion(group: string, motionIndex: number, motion: MotionItem): void {
+  function playReferencedMotion(selectedMotion: SelectedMotion): void {
+    const motion = selectedMotion.motion;
+
     modelSettingsBridge.applyMotionCommand(motion);
     motionVariables.applyAssignments(motion);
     showMotionDialog(motion);
 
     if (motion.File) {
       void model
-        .motion(group, motionIndex, MotionPriority.NORMAL)
+        .motion(
+          resolveEngineMotionLocator(selectedMotion.reference).group,
+          resolveEngineMotionLocator(selectedMotion.reference).index,
+          MotionPriority.NORMAL,
+        )
         .then((started) => {
           if (started) {
             schedulePostCommand(motion);
@@ -513,8 +766,7 @@ export function createMotionController(
         })
         .catch((error: unknown) => {
           console.error('[live2d-motion] motion failed', {
-            group,
-            motionIndex,
+            reference: selectedMotion.reference,
             error,
           });
           requestIdleMotion();
@@ -539,7 +791,7 @@ export function createMotionController(
   function playTouchMotion(action: TouchAction): void {
     if (
       touchMotionState.status !== 'idle' ||
-      presetMotionQueueState.status !== 'idle'
+      presetMotionBufferState.active !== undefined
     ) {
       if (debugTouch) {
         console.log('[live2d-touch] request ignored', {
@@ -555,9 +807,11 @@ export function createMotionController(
       action.motionIndex === undefined
         ? motionSelector.selectGroup(action.group)
         : {
-            group: action.group,
-            index: action.motionIndex,
             motion: motionSelector.getMotion(action.group, action.motionIndex),
+            reference: createMotionReference(
+              action.group,
+              motionSelector.getMotion(action.group, action.motionIndex).Name,
+            ),
           };
     const motion =
       selected === undefined
@@ -601,7 +855,11 @@ export function createMotionController(
     }
 
     void model
-      .motion(action.group, selected.index, MotionPriority.NORMAL)
+      .motion(
+        resolveEngineMotionLocator(selected.reference).group,
+        resolveEngineMotionLocator(selected.reference).index,
+        MotionPriority.NORMAL,
+      )
       .then((started) => {
         if (!started) {
           if (
@@ -615,7 +873,7 @@ export function createMotionController(
             console.log('[live2d-touch] request rejected', {
               requestId,
               action,
-              motionIndex: selected.index,
+              reference: selected.reference,
             });
           }
 
@@ -631,7 +889,7 @@ export function createMotionController(
             console.log('[live2d-touch] stale request ignored', {
               requestId,
               action,
-              motionIndex: selected.index,
+              reference: selected.reference,
               touchMotionState,
             });
           }
@@ -652,7 +910,7 @@ export function createMotionController(
           console.log('[live2d-touch] request playing', {
             requestId,
             action,
-            motionIndex: selected.index,
+            reference: selected.reference,
             variables: motionVariables.entries(),
           });
         }
@@ -718,17 +976,7 @@ export function createMotionController(
 
   return {
     notifyUserActivity,
-
-    startPresetMotionCycle(groupPrefix: string): boolean {
-      if (
-        touchMotionState.status !== 'idle' ||
-        presetMotionQueueState.status !== 'idle'
-      ) {
-        return false;
-      }
-
-      return tryRunPresetMotion(groupPrefix);
-    },
+    startPresetMotionCycle,
 
     playTouchMotion,
     startDefaultMotionCycle,

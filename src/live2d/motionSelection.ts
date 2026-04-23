@@ -3,13 +3,17 @@ import {
   isEnabledModelMotion,
   isExecutableModelMotion,
 } from './live2dEngineBridge';
+import {
+  createMotionReference,
+  parseMotionReference,
+} from './motionReference';
 import type { MotionItem, Settings } from './modelSettings';
 import type { MotionVariableStore } from './motionVariables';
 
 export type SelectedMotion = {
-  group: string;
-  index: number;
+  reference: string;
   motion: MotionItem;
+  presetPrefix?: string;
 };
 
 export function createMotionSelector(
@@ -46,7 +50,7 @@ export function createMotionSelector(
   }
 
   function selectPresetQueue(groupPrefix: string): SelectedMotion[] {
-    return selectAllGroups(getPresetGroups(groupPrefix));
+    return selectAllGroups(getPresetGroups(groupPrefix), groupPrefix);
   }
 
   function selectGroups(groups: string[]): SelectedMotion | undefined {
@@ -54,7 +58,7 @@ export function createMotionSelector(
       const motions = getModelMotions(modelSettings, group);
 
       return motions.flatMap((motion, index) =>
-        isSelectable(motion) ? [{ group, index, motion }] : [],
+        isSelectable(motion) ? [createSelectedMotion(group, index, motion)] : [],
       );
     });
     const pickedIndex = pickWeightedMotionIndex(
@@ -68,25 +72,33 @@ export function createMotionSelector(
     return candidates[pickedIndex];
   }
 
-  function selectEachGroup(groups: string[]): SelectedMotion[] {
+  function selectEachGroup(groups: string[], presetPrefix?: string): SelectedMotion[] {
     return groups.flatMap((group) => {
-      const selected = selectGroup(group);
+      const selected = selectGroup(group, presetPrefix);
 
       return selected ? [selected] : [];
     });
   }
 
-  function selectAllGroups(groups: string[]): SelectedMotion[] {
+  function selectAllGroups(
+    groups: string[],
+    presetPrefix?: string,
+  ): SelectedMotion[] {
     return groups.flatMap((group) => {
       const motions = getModelMotions(modelSettings, group);
 
       return motions.flatMap((motion, index) =>
-        isSelectable(motion) ? [{ group, index, motion }] : [],
+        isSelectable(motion)
+          ? [createSelectedMotion(group, index, motion, presetPrefix)]
+          : [],
       );
     });
   }
 
-  function selectGroup(group: string): SelectedMotion | undefined {
+  function selectGroup(
+    group: string,
+    presetPrefix?: string,
+  ): SelectedMotion | undefined {
     const motions = getModelMotions(modelSettings, group);
     const indexes = motions.flatMap((motion, index) =>
       isSelectable(motion) ? [index] : [],
@@ -101,7 +113,7 @@ export function createMotionSelector(
 
     const index = indexes[pickedIndex];
 
-    return { group, index, motion: motions[index] };
+    return createSelectedMotion(group, index, motions[index], presetPrefix);
   }
 
   function selectReference(reference: string): SelectedMotion | undefined {
@@ -126,7 +138,7 @@ export function createMotionSelector(
     const motion = getMotion(group, index);
 
     return isEnabledModelMotion(motion) && motionVariables.matches(motion)
-      ? { group, index, motion }
+      ? createSelectedMotion(group, index, motion)
       : undefined;
   }
 
@@ -147,13 +159,26 @@ export function createMotionSelector(
   };
 }
 
-function parseMotionReference(reference: string): {
+export function parseSelectedMotionReference(reference: string): {
   group: string;
   motionName?: string;
 } {
-  const [group, motionName] = reference.split(':', 2);
+  return parseMotionReference(reference);
+}
 
-  return { group, motionName };
+function createSelectedMotion(
+  group: string,
+  index: number,
+  motion: MotionItem,
+  presetPrefix?: string,
+): SelectedMotion {
+  const motionName = motion.Name || String(index);
+
+  return {
+    reference: createMotionReference(group, motionName),
+    motion,
+    presetPrefix,
+  };
 }
 
 function isPresetMotionGroup(group: string, prefix: string): boolean {
