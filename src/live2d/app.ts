@@ -22,8 +22,8 @@ export async function createApplication(
 
 export function updateStageHitArea(app: PixiApplication): void {
   app.stage.hitArea = new PIXI.Rectangle(
-    0,
-    0,
+    app.screen.x,
+    app.screen.y,
     app.screen.width,
     app.screen.height,
   );
