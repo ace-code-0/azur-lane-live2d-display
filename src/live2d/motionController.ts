@@ -641,7 +641,11 @@ export function createMotionController(
       presetMotionBufferState.active = next;
       presetMotionBufferState.buffer = rest;
       presetMotionBufferState.requestId = requestId;
-      void playPresetMotionBufferItem(next, requestId);
+      
+      // Force next-frame execution to prevent synchronous recursion loops
+      window.requestAnimationFrame(() => {
+        void playPresetMotionBufferItem(next, requestId);
+      });
       return;
     }
 
@@ -651,10 +655,11 @@ export function createMotionController(
     if (presetPrefix === IDLE_MOTION_PREFIX) {
       resetIdlePresetMotionBuffer();
       if (presetMotionBufferState.active && presetMotionBufferState.requestId !== undefined) {
-        void playPresetMotionBufferItem(
-          presetMotionBufferState.active,
-          presetMotionBufferState.requestId,
-        );
+        const next = presetMotionBufferState.active;
+        const nextId = presetMotionBufferState.requestId;
+        window.requestAnimationFrame(() => {
+          void playPresetMotionBufferItem(next, nextId);
+        });
       }
       return;
     }
@@ -676,7 +681,9 @@ export function createMotionController(
       presetMotionBufferState.active = next;
       presetMotionBufferState.buffer = rest;
       presetMotionBufferState.requestId = requestId;
-      void playPresetMotionBufferItem(next, requestId);
+      window.requestAnimationFrame(() => {
+        void playPresetMotionBufferItem(next, requestId);
+      });
       return;
     }
 
@@ -691,10 +698,11 @@ export function createMotionController(
         presetMotionBufferState.active !== undefined &&
         presetMotionBufferState.requestId !== undefined
       ) {
-        void playPresetMotionBufferItem(
-          presetMotionBufferState.active,
-          presetMotionBufferState.requestId,
-        );
+        const next = presetMotionBufferState.active;
+        const nextId = presetMotionBufferState.requestId;
+        window.requestAnimationFrame(() => {
+          void playPresetMotionBufferItem(next, nextId);
+        });
       }
       return;
     }
@@ -832,10 +840,14 @@ export function createMotionController(
   }
 
   function playTouchMotion(action: TouchAction): void {
-    if (
-      touchMotionState.status !== 'idle' ||
-      presetMotionBufferState.active !== undefined
-    ) {
+    const canInterruptIdlePreset =
+      touchMotionState.status === 'idle' &&
+      presetMotionBufferState.active !== undefined &&
+      presetMotionBufferState.presetPrefix === IDLE_MOTION_PREFIX;
+
+    if (touchMotionState.status !== 'idle' || (
+      presetMotionBufferState.active !== undefined && !canInterruptIdlePreset
+    )) {
       if (debugTouch) {
         console.log('[live2d-touch] request ignored', {
           action,
@@ -846,8 +858,14 @@ export function createMotionController(
       return;
     }
 
+    if (canInterruptIdlePreset) {
+      presetMotionBufferState = { buffer: [] };
+    }
+
     const selected =
-      action.motionIndex === undefined
+      action.kind === 'script'
+        ? motionSelector.selectReference(action.reference)
+        : action.motionIndex === undefined
         ? motionSelector.selectGroup(action.group)
         : {
             motion: motionSelector.getMotion(action.group, action.motionIndex),
@@ -1016,8 +1034,26 @@ export function createMotionController(
     requestIdleMotion();
   }
 
+  let lastDialogMotion: MotionItem | undefined;
+
   function showMotionDialog(motion: MotionItem): void {
+    const hasContent = !!(motion.Text || (motion.Choices && motion.Choices.length > 0));
+
+    // If this motion has no content, don't touch the dialog at all.
+    // This allows interactive dialogs to stay visible while background motions play.
+    if (!hasContent) {
+      return;
+    }
+
+    // If the same motion is already being displayed, don't restart it (prevents flickering)
+    if (lastDialogMotion === motion && modelDialog.state.visible) {
+      return;
+    }
+
+    lastDialogMotion = motion;
+    modelDialog.hide();
     modelDialog.showMotion(motion, (choice) => {
+      lastDialogMotion = undefined;
       startReferencedMotion(choice.NextMtn);
     });
   }

@@ -25,7 +25,7 @@ export class ModelDialogElement extends LitElement {
     :host {
       position: fixed;
       inset: 0;
-      z-index: 10;
+      z-index: 1000; /* Increased z-index */
       pointer-events: none;
       color: #f8fafc;
       font-family:
@@ -33,49 +33,96 @@ export class ModelDialogElement extends LitElement {
         "Segoe UI", sans-serif;
     }
 
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgb(0 0 0 / 15%);
+      pointer-events: auto;
+      backdrop-filter: blur(1px);
+    }
+
     .dialog {
       position: absolute;
       left: 50%;
-      bottom: max(24px, env(safe-area-inset-bottom));
-      width: min(720px, calc(100vw - 32px));
-      transform: translateX(-50%);
-      padding: 16px 18px;
-      border: 1px solid rgb(255 255 255 / 24%);
-      border-radius: 8px;
-      background: rgb(8 13 22 / 76%);
-      box-shadow: 0 18px 50px rgb(0 0 0 / 38%);
-      backdrop-filter: blur(16px);
+      bottom: max(32px, env(safe-area-inset-bottom));
+      width: min(360px, calc(100vw - 40px)); /* Further reduced width */
+      padding: 14px 18px;
+      border: 1px solid rgb(255 255 255 / 12%);
+      border-radius: 12px;
+      background: rgb(15 23 42 / 92%);
+      box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
+      backdrop-filter: blur(20px);
       pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(-50%);
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
     }
 
     .text {
       margin: 0;
-      font-size: 16px;
-      line-height: 1.65;
+      font-size: 14px; /* Slightly smaller for compact look */
+      font-weight: 500;
+      line-height: 1.5;
       overflow-wrap: anywhere;
       text-shadow: 0 1px 2px rgb(0 0 0 / 40%);
+      flex: 1;
+      color: rgb(255 255 255 / 90%);
+    }
+
+    .close-button {
+      background: none;
+      border: none;
+      color: rgb(255 255 255 / 60%);
+      cursor: pointer;
+      padding: 4px;
+      margin: -4px -4px 0 8px;
+      font-size: 20px;
+      line-height: 1;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .close-button:hover {
+      color: #fff;
+      background: rgb(255 255 255 / 10%);
     }
 
     .choices {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-      gap: 8px;
-      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
-    button {
-      min-height: 38px;
-      border: 1px solid rgb(255 255 255 / 22%);
-      border-radius: 6px;
-      background: rgb(255 255 255 / 12%);
+    button.choice {
+      min-height: 44px;
+      padding: 8px 16px;
+      border: 1px solid rgb(255 255 255 / 20%);
+      border-radius: 8px;
+      background: rgb(255 255 255 / 8%);
       color: inherit;
       font: inherit;
-      line-height: 1.2;
+      font-weight: 500;
+      text-align: left;
+      line-height: 1.4;
       cursor: pointer;
+      transition: all 0.2s ease;
     }
 
-    button:hover {
-      background: rgb(255 255 255 / 20%);
+    button.choice:hover {
+      background: rgb(255 255 255 / 18%);
+      border-color: rgb(255 255 255 / 40%);
+      transform: translateY(-1px);
+    }
+
+    button.choice:active {
+      transform: translateY(0);
     }
 
     button:focus-visible {
@@ -112,6 +159,7 @@ export class ModelDialogElement extends LitElement {
     this.closeTimer = undefined;
     this.choiceHandler = undefined;
     this.state = { visible: false };
+    this.requestUpdate();
   }
 
   protected override render(): unknown {
@@ -119,15 +167,23 @@ export class ModelDialogElement extends LitElement {
       return null;
     }
 
+    const hasChoices = this.state.choices.length > 0;
+
     return html`
-      <section class="dialog">
-        ${this.state.text ? html`<p class="text">${this.state.text}</p>` : null}
-        ${this.state.choices.length
+      ${hasChoices ? html`<div class="overlay" @click=${() => this.hide()}></div>` : null}
+      <section class="dialog" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="header">
+          ${this.state.text ? html`<p class="text">${this.state.text}</p>` : html`<div class="text"></div>`}
+          <button class="close-button" @click=${() => this.hide()} aria-label="关闭">
+            &times;
+          </button>
+        </div>
+        ${hasChoices
           ? html`
               <div class="choices">
                 ${this.state.choices.map(
                   (choice) => html`
-                    <button @click=${() => this.selectChoice(choice)}>
+                    <button class="choice" @click=${() => this.selectChoice(choice)}>
                       ${choice.Text}
                     </button>
                   `,
@@ -161,6 +217,7 @@ export class ModelDialogElement extends LitElement {
     window.clearTimeout(this.closeTimer);
     this.closeTimer = undefined;
     this.state = state;
+    this.requestUpdate();
   }
 
   private selectChoice(choice: Choice): void {

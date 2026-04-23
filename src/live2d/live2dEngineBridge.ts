@@ -58,7 +58,6 @@ type AutomatorAdapter = {
 
 type MotionPlaybackAdapter = {
   setLoop?: (loop: boolean) => void;
-  setIsLoop?: (loop: boolean) => void;
 };
 
 type PersistedCommandState = {
@@ -284,7 +283,6 @@ export function createModelSettingsBridge(
         .catch(() => undefined);
 
       loadedMotion?.setLoop?.(true);
-      loadedMotion?.setIsLoop?.(true);
     },
   };
 

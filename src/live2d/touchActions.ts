@@ -10,6 +10,7 @@ export type TouchAction = {
   hitArea: string;
   kind: 'motion' | 'script';
   group: string;
+  reference: string;
   motionIndex?: number;
 };
 
@@ -41,6 +42,7 @@ function createTouchAction(
     hitArea,
     kind: motionIndex === null ? 'script' : 'motion',
     group,
+    reference: motion,
     motionIndex: motionIndex ?? undefined,
   };
 }
