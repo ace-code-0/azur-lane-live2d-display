@@ -1,21 +1,15 @@
-export type ModelVariableConditionType = 1;
-export type ModelVariableAssignmentType = 2;
-export type ModelVariableType =
-  | ModelVariableConditionType
-  | ModelVariableAssignmentType;
-
-export type ModelVariable = {
+export type Variable = {
   Name: string;
-  Type: ModelVariableType;
+  Type: 1 | 2;
   Code: string;
 };
 
-export type ModelChoice = {
+export type Choice = {
   Text: string;
   NextMtn: string;
 };
 
-export type ModelMotion = {
+export type Motion = {
   Name: string;
   Sound?: string;
   File?: string;
@@ -23,61 +17,36 @@ export type ModelMotion = {
   Text?: string;
   Command?: string;
   PostCommand?: string;
-  VarFloats?: ModelVariable[];
+  VarFloats?: Variable[];
   Weight?: number;
   Speed?: number;
   MotionDuration?: number;
   TextDuration?: number;
-  Choices?: ModelChoice[];
+  Choices?: Choice[];
 };
 
-export type ModelMotionGroups = {
-  Idle: ModelMotion[];
-  'Idle#1': ModelMotion[];
-  Start: ModelMotion[];
-  触摸: ModelMotion[];
-  特殊触摸: ModelMotion[];
-  Tap身体: ModelMotion[];
-  Tap背景: ModelMotion[];
-  Leave30_30_30: ModelMotion[];
-  选项: ModelMotion[];
-  台词鉴赏_选项: ModelMotion[];
-  台词鉴赏: ModelMotion[];
-  TouchDrag1: ModelMotion[];
-  TouchDrag2: ModelMotion[];
-  TouchDrag3: ModelMotion[];
-  TouchDrag4: ModelMotion[];
-  TouchDrag5: ModelMotion[];
-  TouchIdle1: ModelMotion[];
-  TouchIdle2: ModelMotion[];
-  TouchIdle3: ModelMotion[];
-  TouchIdle4: ModelMotion[];
-  TouchIdle5: ModelMotion[];
-  Shake: ModelMotion[];
-  'start后置#2': ModelMotion[];
-  '打球后置#3': ModelMotion[];
-};
+export type MotionGroups = Record<string, Motion[]>;
 
-export type ModelHitArea = {
+export type HitArea = {
   Name: string;
   Id?: string;
   Motion?: string;
 };
 
-export type ModelPhysicsV2 = {
+export type PhysicsV2 = {
   File: string;
   MaxWeight: number;
 };
 
-export type ModelFileReferences = {
+export type FileReferences = {
   Moc: string;
   Textures: string[];
   Physics: string;
-  PhysicsV2: ModelPhysicsV2;
-  Motions: ModelMotionGroups;
+  PhysicsV2: PhysicsV2;
+  Motions: MotionGroups;
 };
 
-export type ModelParamHitItem = {
+export type ParamHitItem = {
   Name: string;
   Id: string;
   HitArea: string;
@@ -87,12 +56,12 @@ export type ModelParamHitItem = {
   MaxMtn: string;
 };
 
-export type ModelKeyTriggerItem = {
+export type KeyTriggerItem = {
   Input: number;
   DownMtn: string;
 };
 
-export type ModelEyeBlinkItem = {
+export type EyeBlinkItem = {
   Id: string;
   Min: number;
   Max: number;
@@ -100,14 +69,14 @@ export type ModelEyeBlinkItem = {
   Input: 0;
 };
 
-export type ModelLipSyncItem = {
+export type LipSyncItem = {
   Id: string;
   Min: number;
   Max: number;
   Input: 0;
 };
 
-export type ModelMouseTrackingItem = {
+export type MouseTrackingItem = {
   Id: string;
   Min: number;
   Max: number;
@@ -117,81 +86,81 @@ export type ModelMouseTrackingItem = {
   Input: number;
 };
 
-export type ModelPartOpacityItem = {
+export type PartOpacityItem = {
   Name: string;
   Ids: string[];
   Value: number;
 };
 
-export type ModelEmptyController = Record<string, never>;
+export type EmptyController = Record<string, never>;
 
-export type ModelParamHitController = {
-  Items: ModelParamHitItem[];
+export type ParamHitController = {
+  Items: ParamHitItem[];
   Enabled: boolean;
 };
 
-export type ModelKeyTriggerController = {
-  Items: ModelKeyTriggerItem[];
+export type KeyTriggerController = {
+  Items: KeyTriggerItem[];
   Enabled: boolean;
 };
 
-export type ModelEyeBlinkController = {
+export type EyeBlinkController = {
   MinInterval: number;
   MaxInterval: number;
-  Items: ModelEyeBlinkItem[];
+  Items: EyeBlinkItem[];
 };
 
-export type ModelLipSyncController = {
+export type LipSyncController = {
   Gain: number;
-  Items: ModelLipSyncItem[];
+  Items: LipSyncItem[];
 };
 
-export type ModelMouseTrackingController = {
+export type MouseTrackingController = {
   SmoothTime: number;
-  Items: ModelMouseTrackingItem[];
+  Items: MouseTrackingItem[];
   Enabled: boolean;
 };
 
-export type ModelPartOpacityController = {
-  Items: ModelPartOpacityItem[];
+export type PartOpacityController = {
+  Items: PartOpacityItem[];
   Enabled: boolean;
 };
 
-export type ModelArtmeshCullingController = {
+export type ArtmeshCullingController = {
   DefaultMode: 0;
 };
 
-export type ModelIntimacySystemController = {
+export type IntimacySystemController = {
   MaxValue: number;
   BonusActive: number;
 };
 
-export type ModelControllers = {
-  ParamHit: ModelParamHitController;
-  ParamLoop: ModelEmptyController;
-  KeyTrigger: ModelKeyTriggerController;
-  ParamTrigger: ModelEmptyController;
-  AreaTrigger: ModelEmptyController;
-  HandTrigger: ModelEmptyController;
-  EyeBlink: ModelEyeBlinkController;
-  LipSync: ModelLipSyncController;
-  MouseTracking: ModelMouseTrackingController;
-  AutoBreath: ModelEmptyController;
-  ExtraMotion: ModelEmptyController;
-  Accelerometer: ModelEmptyController;
-  Microphone: ModelEmptyController;
-  Transform: ModelEmptyController;
-  FaceTracking: ModelEmptyController;
-  HandTracking: ModelEmptyController;
-  ParamValue: ModelEmptyController;
-  PartOpacity: ModelPartOpacityController;
-  ArtmeshOpacity: ModelEmptyController;
-  ArtmeshColor: ModelEmptyController;
-  ArtmeshCulling: ModelArtmeshCullingController;
-  IntimacySystem: ModelIntimacySystemController;
+export type Controllers = {
+  ParamHit: ParamHitController;
+  ParamLoop: EmptyController;
+  KeyTrigger: KeyTriggerController;
+  ParamTrigger: EmptyController;
+  AreaTrigger: EmptyController;
+  HandTrigger: EmptyController;
+  EyeBlink: EyeBlinkController;
+  LipSync: LipSyncController;
+  MouseTracking: MouseTrackingController;
+  AutoBreath: EmptyController;
+  ExtraMotion: EmptyController;
+  Accelerometer: EmptyController;
+  Microphone: EmptyController;
+  Transform: EmptyController;
+  FaceTracking: EmptyController;
+  HandTracking: EmptyController;
+  ParamValue: EmptyController;
+  PartOpacity: PartOpacityController;
+  ArtmeshOpacity: EmptyController;
+  ArtmeshColor: EmptyController;
+  ArtmeshCulling: ArtmeshCullingController;
+  IntimacySystem: IntimacySystemController;
 };
 
-export type ModelOptions = {
+export type Options = {
   ScaleFactor: number;
   AnisoLevel: number;
   PositionY: number;
@@ -199,23 +168,21 @@ export type ModelOptions = {
   TexType: number;
 };
 
-export type ModelSettings = {
+export type Settings = {
   Version: 3;
   Type: 0;
-  FileReferences: ModelFileReferences;
-  HitAreas: ModelHitArea[];
-  Controllers: ModelControllers;
-  Options: ModelOptions;
+  FileReferences: FileReferences;
+  HitAreas: HitArea[];
+  Controllers: Controllers;
+  Options: Options;
 };
 
-export async function loadModelSettings(
-  modelUrl: string,
-): Promise<ModelSettings> {
+export async function loadModelSettings(modelUrl: string): Promise<Settings> {
   const response = await fetch(modelUrl);
 
   if (!response.ok) {
     throw new Error(`Failed to load model settings: ${response.status}`);
   }
 
-  return (await response.json()) as ModelSettings;
+  return (await response.json()) as Settings;
 }

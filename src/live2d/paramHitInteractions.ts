@@ -5,7 +5,7 @@ import { getMotion3ParameterTargetValue } from './motion3File';
 
 import type { PixiApplication } from './app';
 import type { Cubism4Model } from './model';
-import type { ModelParamHitItem, ModelSettings } from './modelSettings';
+import type { ParamHitItem, Settings } from './modelSettings';
 
 const DRAG_DISTANCE_THRESHOLD = 8;
 const TAP_SUPPRESSION_MS = 250;
@@ -15,7 +15,7 @@ type MotionController = {
 };
 
 type ParamHitTarget = {
-  item: ModelParamHitItem;
+  item: ParamHitItem;
   targetValue: number;
 };
 
@@ -36,7 +36,7 @@ export async function installParamHitInteractions(
   app: PixiApplication,
   model: Cubism4Model,
   modelUrl: string,
-  settings: ModelSettings,
+  settings: Settings,
   motionController: MotionController,
   debugTouch: boolean,
 ): Promise<ParamHitInteraction> {
@@ -172,7 +172,7 @@ export async function installParamHitInteractions(
 
 async function createParamHitTargets(
   modelUrl: string,
-  settings: ModelSettings,
+  settings: Settings,
 ): Promise<ParamHitTarget[]> {
   if (!settings.Controllers.ParamHit.Enabled) {
     return [];
@@ -231,7 +231,7 @@ function hasReachedTarget(value: number, targetValue: number): boolean {
   return targetValue >= 0 ? value >= targetValue : value <= targetValue;
 }
 
-function releaseParameter(model: Cubism4Model, item: ModelParamHitItem): void {
+function releaseParameter(model: Cubism4Model, item: ParamHitItem): void {
   if (item.ReleaseType === 0) {
     setModelParameter(model, item.Id, 0);
   }

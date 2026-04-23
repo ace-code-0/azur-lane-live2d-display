@@ -5,7 +5,7 @@ import {
 } from './live2dEngineBridge';
 
 import type { PixiApplication } from './app';
-import type { ModelOptions, ModelSettings } from './modelSettings';
+import type { Options, Settings } from './modelSettings';
 
 export type Cubism4Model = Live2DModel;
 
@@ -14,7 +14,7 @@ let hasLoggedModelFit = false;
 export async function loadModel(
   app: PixiApplication,
   modelUrl: string,
-  modelSettings: ModelSettings,
+  modelSettings: Settings,
 ): Promise<Cubism4Model> {
   const model = await Live2DModel.from(
     createEngineModelSettings(modelSettings, modelUrl),
@@ -43,7 +43,7 @@ export async function loadModel(
 export function fitModel(
   app: PixiApplication,
   model: Cubism4Model,
-  options: ModelOptions,
+  options: Options,
 ): void {
   model.anchor.set(0.5, 0.8);
   model.position.set(

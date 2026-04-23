@@ -1,6 +1,6 @@
 import { getModelMotions } from './live2dEngineBridge';
 
-import type { ModelMotion, ModelSettings } from './modelSettings';
+import type { Motion, Settings } from './modelSettings';
 
 type Motion3CurveTarget = 'Model' | 'Parameter' | 'PartOpacity';
 
@@ -22,7 +22,7 @@ const INVERSE_STEPPED_SEGMENT = 3;
 
 export async function getMotion3ParameterTargetValue(
   modelUrl: string,
-  settings: ModelSettings,
+  settings: Settings,
   motionReference: string,
   parameterId: string,
 ): Promise<number | undefined> {
@@ -43,9 +43,9 @@ export async function getMotion3ParameterTargetValue(
 }
 
 function findReferencedMotion(
-  settings: ModelSettings,
+  settings: Settings,
   reference: string,
-): ModelMotion | undefined {
+): Motion | undefined {
   const [group, motionName] = reference.split(':', 2);
   const motions = getModelMotions(settings, group);
 

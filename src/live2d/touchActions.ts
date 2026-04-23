@@ -3,7 +3,7 @@ import {
   isExecutableModelMotion,
 } from './live2dEngineBridge';
 
-import type { ModelMotion, ModelSettings } from './modelSettings';
+import type { Motion, Settings } from './modelSettings';
 
 export type TouchAction = {
   hitArea: string;
@@ -12,7 +12,7 @@ export type TouchAction = {
   motionIndex?: number;
 };
 
-export function createTouchActions(settings: ModelSettings): TouchAction[] {
+export function createTouchActions(settings: Settings): TouchAction[] {
   const actionsByHitArea = new Map<string, TouchAction>();
 
   for (const hitArea of settings.HitAreas) {
@@ -30,7 +30,7 @@ export function createTouchActions(settings: ModelSettings): TouchAction[] {
 function createTouchAction(
   hitArea: string,
   motion: string,
-  settings: ModelSettings,
+  settings: Settings,
 ): TouchAction {
   const [group, motionName] = motion.split(':', 2);
   const motions = getModelMotions(settings, group);
@@ -45,7 +45,7 @@ function createTouchAction(
 }
 
 function getPlayableMotionIndex(
-  motions: ModelMotion[],
+  motions: Motion[],
   motionName?: string,
 ): number | null | undefined {
   if (motionName !== undefined) {

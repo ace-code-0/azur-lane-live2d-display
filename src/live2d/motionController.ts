@@ -7,7 +7,7 @@ import {
 
 import type { Cubism4Model } from './model';
 import type { ModelDialogElement } from '../ui/modelDialog';
-import type { ModelMotion, ModelSettings } from './modelSettings';
+import type { Motion, Settings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
 type TouchMotionState =
@@ -18,13 +18,13 @@ type TouchMotionState =
       status: 'loading';
       requestId: number;
       action: TouchAction;
-      motion: ModelMotion;
+      motion: Motion;
     }
   | {
       status: 'playing';
       requestId: number;
       action: TouchAction;
-      motion: ModelMotion;
+      motion: Motion;
     };
 
 type MotionManagerState = {
@@ -34,7 +34,7 @@ type MotionManagerState = {
 
 type MotionDebugState = {
   manager: MotionManagerState;
-  motion?: ModelMotion;
+  motion?: Motion;
   motionVariables: Record<string, number>;
   touchMotionState: TouchMotionState;
 };
@@ -56,7 +56,7 @@ export type MotionController = {
 
 export function createMotionController(
   model: Cubism4Model,
-  modelSettings: ModelSettings,
+  modelSettings: Settings,
   modelDialog: ModelDialogElement,
   debugTouch: boolean,
 ): MotionController {
@@ -182,7 +182,7 @@ export function createMotionController(
   }
 
   function pickWeightedMotionIndex(
-    motions: ModelMotion[],
+    motions: Motion[],
     indexes: number[],
   ): number | undefined {
     if (indexes.length === 0) {
@@ -211,7 +211,7 @@ export function createMotionController(
     return indexes[indexes.length - 1];
   }
 
-  function isMotionConditionMatched(motion: ModelMotion): boolean {
+  function isMotionConditionMatched(motion: Motion): boolean {
     return (
       motion.VarFloats?.every((variable) => {
         if (variable.Type !== 1) {
@@ -228,7 +228,7 @@ export function createMotionController(
     );
   }
 
-  function applyMotionAssignments(motion: ModelMotion): void {
+  function applyMotionAssignments(motion: Motion): void {
     for (const variable of motion.VarFloats ?? []) {
       if (variable.Type !== 2) {
         continue;
@@ -293,7 +293,7 @@ export function createMotionController(
     return motionIndex;
   }
 
-  function getMotion(group: string, motionIndex: number): ModelMotion {
+  function getMotion(group: string, motionIndex: number): Motion {
     const motion = getModelMotions(modelSettings, group)[motionIndex];
 
     if (!motion) {
@@ -335,7 +335,7 @@ export function createMotionController(
     schedulePostCommand(motion);
   }
 
-  function schedulePostCommand(motion: ModelMotion): void {
+  function schedulePostCommand(motion: Motion): void {
     if (motion.MotionDuration === undefined) {
       modelSettingsBridge.applyMotionPostCommand(motion);
       return;
@@ -473,7 +473,7 @@ export function createMotionController(
   function scheduleTouchMotionFinish(
     requestId: number,
     action: TouchAction,
-    motion: ModelMotion,
+    motion: Motion,
   ): void {
     if (motion.MotionDuration === undefined) {
       if (!motion.File) {
@@ -491,7 +491,7 @@ export function createMotionController(
   function finishTouchMotion(
     requestId: number,
     action: TouchAction,
-    motion: ModelMotion,
+    motion: Motion,
   ): void {
     if (
       touchMotionState.status !== 'playing' ||
@@ -510,7 +510,7 @@ export function createMotionController(
     requestIdleMotion();
   }
 
-  function showMotionDialog(motion: ModelMotion): void {
+  function showMotionDialog(motion: Motion): void {
     modelDialog.showMotion(motion, (choice) => {
       runReferencedMotion(choice.NextMtn);
     });

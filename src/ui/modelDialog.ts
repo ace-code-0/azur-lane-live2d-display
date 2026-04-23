@@ -1,6 +1,6 @@
 import { css, html, LitElement } from 'lit';
 
-import type { ModelChoice, ModelMotion } from '../live2d/modelSettings';
+import type { Choice, Motion } from '../live2d/modelSettings';
 
 const TEXT_BASE_DURATION_MS = 500;
 const TEXT_PER_CHARACTER_MS = 90;
@@ -13,7 +13,7 @@ type DialogState =
   | {
       visible: true;
       text: string;
-      choices: ModelChoice[];
+      choices: Choice[];
     };
 
 export class ModelDialogElement extends LitElement {
@@ -86,7 +86,7 @@ export class ModelDialogElement extends LitElement {
 
   private declare state: DialogState;
   private closeTimer: number | undefined;
-  private choiceHandler: ((choice: ModelChoice) => void) | undefined;
+  private choiceHandler: ((choice: Choice) => void) | undefined;
 
   constructor() {
     super();
@@ -94,8 +94,8 @@ export class ModelDialogElement extends LitElement {
   }
 
   showMotion(
-    motion: ModelMotion,
-    onChoice: (choice: ModelChoice) => void,
+    motion: Motion,
+    onChoice: (choice: Choice) => void,
   ): void {
     if (motion.Choices) {
       this.showChoices(motion.Text ?? '', motion.Choices, onChoice);
@@ -149,8 +149,8 @@ export class ModelDialogElement extends LitElement {
 
   private showChoices(
     text: string,
-    choices: ModelChoice[],
-    onChoice: (choice: ModelChoice) => void,
+    choices: Choice[],
+    onChoice: (choice: Choice) => void,
   ): void {
     this.choiceHandler = onChoice;
     this.setDialog({ visible: true, text, choices });
@@ -163,7 +163,7 @@ export class ModelDialogElement extends LitElement {
     this.state = state;
   }
 
-  private selectChoice(choice: ModelChoice): void {
+  private selectChoice(choice: Choice): void {
     const choiceHandler = this.choiceHandler;
 
     this.hide();

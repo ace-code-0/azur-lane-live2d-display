@@ -5,15 +5,15 @@ export {
 } from 'untitled-pixi-live2d-engine/cubism';
 
 import type { Cubism4Model } from './model';
-import type { ModelMotion, ModelSettings } from './modelSettings';
+import type { Motion, Settings } from './modelSettings';
 
 export type ModelSettingsBridge = {
   applyInitialSettings(): void;
-  applyMotionCommand(motion: ModelMotion): void;
-  applyMotionPostCommand(motion: ModelMotion): void;
+  applyMotionCommand(motion: Motion): void;
+  applyMotionPostCommand(motion: Motion): void;
 };
 
-export type EngineModelSettings = ModelSettings & {
+export type EngineModelSettings = Settings & {
   url: string;
   Groups: {
     Target: 'Parameter';
@@ -46,11 +46,11 @@ type AutomatorAdapter = {
 };
 
 export function getModelMotions(
-  settings: ModelSettings,
+  settings: Settings,
   group: string,
-): ModelMotion[] {
+): Motion[] {
   const motions = settings.FileReferences.Motions as Partial<
-    Record<string, ModelMotion[]>
+    Record<string, Motion[]>
   >;
   const groupMotions = motions[group];
 
@@ -62,7 +62,7 @@ export function getModelMotions(
 }
 
 export function createEngineModelSettings(
-  settings: ModelSettings,
+  settings: Settings,
   modelUrl: string,
 ): EngineModelSettings {
   return {
@@ -83,7 +83,7 @@ export function createEngineModelSettings(
   };
 }
 
-export function isExecutableModelMotion(motion: ModelMotion): boolean {
+export function isExecutableModelMotion(motion: Motion): boolean {
   return (
     motion.File !== undefined ||
     motion.Command !== undefined ||
@@ -95,7 +95,7 @@ export function isExecutableModelMotion(motion: ModelMotion): boolean {
 
 export function createModelSettingsBridge(
   model: Cubism4Model,
-  settings: ModelSettings,
+  settings: Settings,
   callbacks: BridgeCallbacks,
 ): ModelSettingsBridge {
   const parameterLocks = new Map<string, number>();
@@ -170,11 +170,11 @@ export function createModelSettingsBridge(
       applyPartOpacitySettings(model, settings);
     },
 
-    applyMotionCommand(motion: ModelMotion): void {
+    applyMotionCommand(motion: Motion): void {
       applyCommand(motion.Command);
     },
 
-    applyMotionPostCommand(motion: ModelMotion): void {
+    applyMotionPostCommand(motion: Motion): void {
       applyCommand(motion.PostCommand);
     },
   };
@@ -189,7 +189,7 @@ export function setMouseTrackingEnabled(
 
 function applyPartOpacitySettings(
   model: Cubism4Model,
-  settings: ModelSettings,
+  settings: Settings,
 ): void {
   if (!settings.Controllers.PartOpacity.Enabled) {
     return;
