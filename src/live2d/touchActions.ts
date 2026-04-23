@@ -24,15 +24,6 @@ export function createTouchActions(settings: ModelSettings): TouchAction[] {
     }
   }
 
-  for (const item of settings.Controllers.ParamHit.Items) {
-    if (!actionsByHitArea.has(item.HitArea)) {
-      actionsByHitArea.set(
-        item.HitArea,
-        createTouchAction(item.HitArea, item.MaxMtn, settings),
-      );
-    }
-  }
-
   return Array.from(actionsByHitArea.values());
 }
 

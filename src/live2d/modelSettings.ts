@@ -81,7 +81,7 @@ export type ModelParamHitItem = {
   Name: string;
   Id: string;
   HitArea: string;
-  Axis: 0;
+  Axis: 0 | 1;
   Factor: number;
   ReleaseType: 0;
   MaxMtn: string;

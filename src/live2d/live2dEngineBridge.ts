@@ -103,7 +103,7 @@ export function createModelSettingsBridge(
   const internalModel = getInternalModel(model);
   internalModel.on('beforeModelUpdate', () => {
     for (const [id, value] of parameterLocks) {
-      setParameter(model, id, value);
+      setModelParameter(model, id, value);
     }
   });
 
@@ -152,12 +152,12 @@ export function createModelSettingsBridge(
 
     if (action === 'lock') {
       parameterLocks.set(target, value);
-      setParameter(model, target, value);
+      setModelParameter(model, target, value);
       return;
     }
 
     if (action === 'set') {
-      setParameter(model, target, value);
+      setModelParameter(model, target, value);
       return;
     }
 
@@ -211,7 +211,7 @@ function splitCommand(command: string | undefined): string[] {
   );
 }
 
-function setParameter(
+export function setModelParameter(
   model: Cubism4Model,
   id: string,
   value: number,

@@ -2,6 +2,7 @@ import { createApplication, updateStageHitArea } from './live2d/app';
 import { fitModel, loadModel } from './live2d/model';
 import { loadModelSettings } from './live2d/modelSettings';
 import { createMotionController } from './live2d/motionController';
+import { installParamHitInteractions } from './live2d/paramHitInteractions';
 import { createTouchActions } from './live2d/touchActions';
 import { installTouchDragInteractions } from './live2d/touchDragInteractions';
 import { installTouchInteractions } from './live2d/touchInteractions';
@@ -31,6 +32,14 @@ async function bootstrap(): Promise<void> {
 
   app.stage.addChild(model);
   fitModel(app, model, modelSettings.Options);
+  const paramHitInteraction = await installParamHitInteractions(
+    app,
+    model,
+    MODEL_URL,
+    modelSettings,
+    motionController,
+    DEBUG_TOUCH,
+  );
   const touchDragInteraction = installTouchDragInteractions(
     app,
     model,
@@ -45,7 +54,9 @@ async function bootstrap(): Promise<void> {
     motionController,
     DEBUG_TOUCH,
     {
-      shouldIgnoreTap: touchDragInteraction.shouldIgnoreTap,
+      shouldIgnoreTap: (event) =>
+        paramHitInteraction.shouldIgnoreTap(event) ||
+        touchDragInteraction.shouldIgnoreTap(event),
     },
   );
 
