@@ -82,20 +82,8 @@ export function createMotionController(
   }
 
   motionManager.on('motionFinish', () => {
-    const finishedMotion = getCurrentMotion();
-
     if (touchMotionState.status !== 'playing') {
-      if (debugTouch) {
-        console.log('[live2d-motion] manager finish ignored', {
-          finishedMotion,
-          touchMotionState,
-        });
-      }
-
-      if (finishedMotion.group !== 'Idle') {
-        requestIdleMotion();
-      }
-
+      requestIdleMotion();
       return;
     }
 
@@ -151,6 +139,10 @@ export function createMotionController(
 
   function requestIdleMotion(): void {
     window.setTimeout(() => {
+      if (touchMotionState.status !== 'idle' || getCurrentMotion().group) {
+        return;
+      }
+
       void startIdleMotion();
     }, 0);
   }
