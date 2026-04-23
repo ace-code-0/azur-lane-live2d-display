@@ -59,6 +59,13 @@ type PresetMotionBufferState = {
   buffer: ActiveMotion[];
 };
 
+type LeaveSchedule = {
+  group: string;
+  startDelayMs: number;
+  minIntervalMs: number;
+  maxIntervalMs: number;
+};
+
 type MotionDebugState = {
   motionVariables: Record<string, number>;
   pendingIdleRequestId: number;
@@ -262,9 +269,9 @@ export function createMotionController(
   }
 
   function resetLeaveTimer(): void {
-    const leaveMotion = getLeaveMotion();
+    const leaveSchedule = getLeaveSchedule();
 
-    if (!leaveMotion) {
+    if (!leaveSchedule) {
       return;
     }
 
@@ -279,25 +286,79 @@ export function createMotionController(
         startPresetMotionCycle(LEAVE_MOTION_PREFIX);
       }
 
-      resetLeaveTimer();
-    }, leaveMotion.timeoutMs);
+      scheduleNextLeaveTrigger(leaveSchedule);
+    }, leaveSchedule.startDelayMs);
   }
 
-  function getLeaveMotion(): { group: string; timeoutMs: number } | undefined {
+  function scheduleNextLeaveTrigger(leaveSchedule: LeaveSchedule): void {
+    if (leaveTimer !== undefined) {
+      window.clearTimeout(leaveTimer);
+    }
+
+    leaveTimer = window.setTimeout(() => {
+      leaveTimer = undefined;
+
+      if (touchMotionState.status === 'idle') {
+        startPresetMotionCycle(LEAVE_MOTION_PREFIX);
+      }
+
+      scheduleNextLeaveTrigger(leaveSchedule);
+    }, pickLeaveIntervalMs(leaveSchedule));
+  }
+
+  function getLeaveSchedule(): LeaveSchedule | undefined {
     const group = getPresetMotionGroups(LEAVE_MOTION_PREFIX)[0];
 
     if (!group) {
       return undefined;
     }
 
-    const timeoutSeconds = Number(group.match(/^Leave(\d+)/)?.[1]);
+    const parsedLeaveGroup = parseLeaveGroup(group);
+
+    if (!parsedLeaveGroup) {
+      return undefined;
+    }
+
+    return parsedLeaveGroup;
+  }
+
+  function parseLeaveGroup(group: string): LeaveSchedule | undefined {
+    const match = group.match(/^Leave(\d+)_(\d+)_(\d+)$/) ?? group.match(/^leave_(\d+)_(\d+)_(\d+)$/);
+
+    if (!match) {
+      return undefined;
+    }
+
+    const [startSeconds, minIntervalSeconds, maxIntervalSeconds] = match
+      .slice(1)
+      .map(Number);
+
+    if (
+      !Number.isFinite(startSeconds) ||
+      !Number.isFinite(minIntervalSeconds) ||
+      !Number.isFinite(maxIntervalSeconds)
+    ) {
+      return undefined;
+    }
 
     return {
       group,
-      timeoutMs: Number.isFinite(timeoutSeconds)
-        ? timeoutSeconds * 1000
-        : 30000,
+      startDelayMs: startSeconds * 1000,
+      minIntervalMs: minIntervalSeconds * 1000,
+      maxIntervalMs: maxIntervalSeconds * 1000,
     };
+  }
+
+  function pickLeaveIntervalMs(leaveSchedule: LeaveSchedule): number {
+    const { minIntervalMs, maxIntervalMs } = leaveSchedule;
+
+    if (maxIntervalMs <= minIntervalMs) {
+      return minIntervalMs;
+    }
+
+    return Math.round(
+      minIntervalMs + Math.random() * (maxIntervalMs - minIntervalMs),
+    );
   }
 
   function requestIdleMotion(): void {
@@ -531,6 +592,11 @@ export function createMotionController(
 
   async function startEngineMotion(active: ActiveMotion): Promise<boolean> {
     const locator = resolveEngineMotionLocator(active.selectedMotion.reference);
+    await modelSettingsBridge.prepareMotionPlayback(
+      locator.group,
+      locator.index,
+      active.selectedMotion.motion,
+    );
 
     return model.motion(locator.group, locator.index, active.priority);
   }
@@ -727,11 +793,12 @@ export function createMotionController(
     showMotionDialog(motion);
 
     if (motion.File) {
-      void model
-        .motion(
-          resolveEngineMotionLocator(selectedMotion.reference).group,
-          resolveEngineMotionLocator(selectedMotion.reference).index,
-          MotionPriority.NORMAL,
+      const locator = resolveEngineMotionLocator(selectedMotion.reference);
+
+      void modelSettingsBridge
+        .prepareMotionPlayback(locator.group, locator.index, motion)
+        .then(() =>
+          model.motion(locator.group, locator.index, MotionPriority.NORMAL),
         )
         .then((started) => {
           if (started) {
@@ -830,11 +897,16 @@ export function createMotionController(
       return;
     }
 
-    void model
-      .motion(
-        resolveEngineMotionLocator(selected.reference).group,
-        resolveEngineMotionLocator(selected.reference).index,
-        MotionPriority.NORMAL,
+    const locator = resolveEngineMotionLocator(selected.reference);
+
+    void modelSettingsBridge
+      .prepareMotionPlayback(locator.group, locator.index, motion)
+      .then(() =>
+        model.motion(
+          locator.group,
+          locator.index,
+          MotionPriority.NORMAL,
+        ),
       )
       .then((started) => {
         if (!started) {

@@ -11,6 +11,11 @@ export type ModelSettingsBridge = {
   applyInitialSettings(): void;
   applyMotionCommand(motion: MotionItem): void;
   applyMotionPostCommand(motion: MotionItem): void;
+  prepareMotionPlayback(
+    group: string,
+    index: number,
+    motion: MotionItem,
+  ): Promise<void>;
 };
 
 export type EngineModelSettings = Settings & {
@@ -38,12 +43,31 @@ type InternalModelAdapter = {
   idManager?: {
     getId(id: string): unknown;
   };
+  motionManager?: {
+    loadMotion?: (
+      group: string,
+      index: number,
+    ) => Promise<MotionPlaybackAdapter | undefined>;
+  };
   on(event: 'beforeModelUpdate', listener: () => void): void;
 };
 
 type AutomatorAdapter = {
   autoFocus?: boolean;
 };
+
+type MotionPlaybackAdapter = {
+  setLoop?: (loop: boolean) => void;
+  setIsLoop?: (loop: boolean) => void;
+};
+
+type PersistedCommandState = {
+  mouseTrackingEnabled?: boolean;
+  parameterLocks: Record<string, number>;
+  parameterValues: Record<string, number>;
+};
+
+const COMMAND_STATE_STORAGE_KEY = 'live2d.commandState';
 
 export function getModelMotions(
   settings: Settings,
@@ -116,7 +140,6 @@ function createEngineFileReferences(settings: Settings): FileReferences {
         group,
         motions.map((motion) => ({
           ...motion,
-          FileLoop: group.startsWith('Idle') ? false : motion.FileLoop,
           File:
             motion.File === undefined
               ? undefined
@@ -141,6 +164,8 @@ export function createModelSettingsBridge(
   callbacks: BridgeCallbacks,
 ): ModelSettingsBridge {
   const parameterLocks = new Map<string, number>();
+  const parameterValues = new Map<string, number>();
+  const persistedCommandState = restoreCommandState();
 
   const internalModel = getInternalModel(model);
   internalModel.on('beforeModelUpdate', () => {
@@ -154,7 +179,10 @@ export function createModelSettingsBridge(
       const [namespace, action, target, rawValue] = statement.split(/\s+/, 4);
 
       if (namespace === 'mouse_tracking') {
-        setMouseTrackingEnabled(model, action === 'enable');
+        const enabled = action === 'enable';
+        setMouseTrackingEnabled(model, enabled);
+        persistedCommandState.mouseTrackingEnabled = enabled;
+        persistCommandState();
         continue;
       }
 
@@ -183,6 +211,8 @@ export function createModelSettingsBridge(
 
     if (action === 'unlock') {
       parameterLocks.delete(target);
+      delete persistedCommandState.parameterLocks[target];
+      persistCommandState();
       return;
     }
 
@@ -194,12 +224,17 @@ export function createModelSettingsBridge(
 
     if (action === 'lock') {
       parameterLocks.set(target, value);
+      persistedCommandState.parameterLocks[target] = value;
       setModelParameter(model, target, value);
+      persistCommandState();
       return;
     }
 
     if (action === 'set') {
+      parameterValues.set(target, value);
+      persistedCommandState.parameterValues[target] = value;
       setModelParameter(model, target, value);
+      persistCommandState();
       return;
     }
 
@@ -208,7 +243,22 @@ export function createModelSettingsBridge(
 
   return {
     applyInitialSettings(): void {
-      setMouseTrackingEnabled(model, settings.Controllers.MouseTracking.Enabled);
+      setMouseTrackingEnabled(
+        model,
+        persistedCommandState.mouseTrackingEnabled ??
+          settings.Controllers.MouseTracking.Enabled,
+      );
+
+      for (const [id, value] of Object.entries(persistedCommandState.parameterValues)) {
+        parameterValues.set(id, value);
+        setModelParameter(model, id, value);
+      }
+
+      for (const [id, value] of Object.entries(persistedCommandState.parameterLocks)) {
+        parameterLocks.set(id, value);
+        setModelParameter(model, id, value);
+      }
+
       applyPartOpacitySettings(model, settings);
     },
 
@@ -219,7 +269,64 @@ export function createModelSettingsBridge(
     applyMotionPostCommand(motion: MotionItem): void {
       applyCommand(motion.PostCommand);
     },
+
+    async prepareMotionPlayback(
+      group: string,
+      index: number,
+      motion: MotionItem,
+    ): Promise<void> {
+      if (!motion.FileLoop) {
+        return;
+      }
+
+      const loadedMotion = await internalModel.motionManager
+        ?.loadMotion?.(group, index)
+        .catch(() => undefined);
+
+      loadedMotion?.setLoop?.(true);
+      loadedMotion?.setIsLoop?.(true);
+    },
   };
+
+  function persistCommandState(): void {
+    try {
+      window.localStorage.setItem(
+        COMMAND_STATE_STORAGE_KEY,
+        JSON.stringify({
+          mouseTrackingEnabled: persistedCommandState.mouseTrackingEnabled,
+          parameterLocks: Object.fromEntries(parameterLocks),
+          parameterValues: Object.fromEntries(parameterValues),
+        } satisfies PersistedCommandState),
+      );
+    } catch (error) {
+      console.warn('[live2d-motion] failed to persist command state', error);
+    }
+  }
+
+  function restoreCommandState(): PersistedCommandState {
+    try {
+      const stored = window.localStorage.getItem(COMMAND_STATE_STORAGE_KEY);
+
+      if (!stored) {
+        return { parameterLocks: {}, parameterValues: {} };
+      }
+
+      const parsed = JSON.parse(stored) as Partial<PersistedCommandState>;
+
+      return {
+        mouseTrackingEnabled:
+          typeof parsed.mouseTrackingEnabled === 'boolean'
+            ? parsed.mouseTrackingEnabled
+            : undefined,
+        parameterLocks: coerceNumberRecord(parsed.parameterLocks),
+        parameterValues: coerceNumberRecord(parsed.parameterValues),
+      };
+    } catch (error) {
+      console.warn('[live2d-motion] failed to restore command state', error);
+
+      return { parameterLocks: {}, parameterValues: {} };
+    }
+  }
 }
 
 export function setMouseTrackingEnabled(
@@ -250,6 +357,18 @@ function splitCommand(command: string | undefined): string[] {
       ?.split(';')
       .map((statement) => statement.trim())
       .filter((statement) => statement.length > 0) ?? []
+  );
+}
+
+function coerceNumberRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, entryValue]) =>
+      typeof entryValue === 'number' ? [[key, entryValue]] : [],
+    ),
   );
 }
 

@@ -1,7 +1,5 @@
 import type { MotionItem, Settings } from './modelSettings';
 
-const STORAGE_KEY = 'live2d.motionVariables';
-
 export class MotionVariableStore {
   private readonly values: Map<string, number>;
 
@@ -9,7 +7,6 @@ export class MotionVariableStore {
     this.values = new Map(
       collectVariableNames(settings).map((name) => [name, 0]),
     );
-    this.restore();
   }
 
   entries(): Record<string, number> {
@@ -34,8 +31,6 @@ export class MotionVariableStore {
   }
 
   applyAssignments(motion: MotionItem): void {
-    let changed = false;
-
     for (const variable of motion.VarFloats ?? []) {
       if (variable.Type !== 2) {
         continue;
@@ -45,40 +40,7 @@ export class MotionVariableStore {
 
       if (value !== undefined) {
         this.values.set(variable.Name, value);
-        changed = true;
       }
-    }
-
-    if (changed) {
-      this.persist();
-    }
-  }
-
-  private restore(): void {
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-
-      if (!stored) {
-        return;
-      }
-
-      const values = JSON.parse(stored) as Record<string, unknown>;
-
-      for (const [name, value] of Object.entries(values)) {
-        if (this.values.has(name) && typeof value === 'number') {
-          this.values.set(name, value);
-        }
-      }
-    } catch (error) {
-      console.warn('[live2d-motion] failed to restore variables', error);
-    }
-  }
-
-  private persist(): void {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(this.entries()));
-    } catch (error) {
-      console.warn('[live2d-motion] failed to persist variables', error);
     }
   }
 }

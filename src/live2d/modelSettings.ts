@@ -30,14 +30,14 @@ export type MotionItem = {
   Enabled?: boolean;
 };
 
-// Motions 有预定义部分，完全匹配时处理
+// Motions 有预定义部分，按 Live2DViewerEX 预定义组规则处理
 // Idle
 // Tap
-// TapArea
+// TapAreaName
 // Start
 // Shake
-// Tick
-// Leave
+// Tick / TickX / tick_x
+// LeaveX_Y_Z / leave_x_y_z
 export type Motions = Record<string, MotionItem[]>;
 
 export type HitArea = {

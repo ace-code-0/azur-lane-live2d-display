@@ -182,6 +182,14 @@ function createSelectedMotion(
 }
 
 function isPresetMotionGroup(group: string, prefix: string): boolean {
+  if (prefix === 'Tick') {
+    return group === 'Tick' || /^Tick\d+$/.test(group) || /^tick_\d+$/.test(group);
+  }
+
+  if (prefix === 'Leave') {
+    return /^Leave\d+_\d+_\d+$/.test(group) || /^leave_\d+_\d+_\d+$/.test(group);
+  }
+
   return group === prefix;
 }
 
