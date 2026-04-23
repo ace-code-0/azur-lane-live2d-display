@@ -61,11 +61,17 @@ export type KeyTriggerItem = {
   DownMtn: string;
 };
 
+// 覆盖 0，叠加 1，乘算 2
+export type BlendMode = 0 | 1 | 2;
+
+// 0 X 水平，1 Y 垂直
+export type Axis = 0 | 1;
+
 export type EyeBlinkItem = {
   Id: string;
   Min: number;
   Max: number;
-  BlendMode: 2;
+  BlendMode: BlendMode;
   Input: 0;
 };
 
@@ -81,9 +87,9 @@ export type MouseTrackingItem = {
   Min: number;
   Max: number;
   DefaultValue: number;
-  BlendMode: 1;
-  Axis?: 1;
-  Input: number;
+  BlendMode: BlendMode;
+  Axis?: Axis;
+  Input: 1 | 2;
 };
 
 export type PartOpacityItem = {
