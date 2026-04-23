@@ -3,6 +3,7 @@ import { fitModel, loadModel } from './live2d/model';
 import { loadModelSettings } from './live2d/modelSettings';
 import { createMotionController } from './live2d/motionController';
 import { createTouchActions } from './live2d/touchActions';
+import { installTouchDragInteractions } from './live2d/touchDragInteractions';
 import { installTouchInteractions } from './live2d/touchInteractions';
 import { createModelDialog } from './ui/modelDialog';
 
@@ -30,12 +31,22 @@ async function bootstrap(): Promise<void> {
 
   app.stage.addChild(model);
   fitModel(app, model, modelSettings.Options);
+  const touchDragInteraction = installTouchDragInteractions(
+    app,
+    model,
+    touchActions,
+    motionController,
+    DEBUG_TOUCH,
+  );
   installTouchInteractions(
     app,
     model,
     touchActions,
     motionController,
     DEBUG_TOUCH,
+    {
+      shouldIgnoreTap: touchDragInteraction.shouldIgnoreTap,
+    },
   );
 
   Object.assign(window, { pixiApp: app, live2dModel: model });

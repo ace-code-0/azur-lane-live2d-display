@@ -9,18 +9,31 @@ type MotionController = {
   startIdleMotion(): void;
 };
 
+type TouchInteractionOptions = {
+  shouldIgnoreTap?: (event: PIXI.FederatedPointerEvent) => boolean;
+};
+
 export function installTouchInteractions(
   app: PixiApplication,
   model: Cubism4Model,
   touchActions: TouchAction[],
   motionController: MotionController,
   debugTouch: boolean,
+  options: TouchInteractionOptions = {},
 ): void {
   if (debugTouch) {
     console.log('[live2d-touch] installed', JSON.stringify(touchActions));
   }
 
   app.stage.on('pointertap', (event: PIXI.FederatedPointerEvent) => {
+    if (options.shouldIgnoreTap?.(event)) {
+      if (debugTouch) {
+        console.log('[live2d-touch] tap ignored after drag');
+      }
+
+      return;
+    }
+
     const hitAreas = model.hitTest(event.global.x, event.global.y);
 
     if (debugTouch) {
