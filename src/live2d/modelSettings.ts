@@ -168,15 +168,18 @@ export type Controllers = {
 
 export type Options = {
   ScaleFactor: number;
-  AnisoLevel: number;
+  AnisoLevel: 0 | 2 | 4 | 8 | 16;
+  PositionX: number;
   PositionY: number;
+  // UI: 边缘填充
   TexFixed: boolean;
-  TexType: number;
+  // 蒙版纹理过滤模式：0 = 双线性过滤（平滑），1 = 点过滤（最近邻）
+  TexType: 0 | 1;
 };
 
 export type Settings = {
-  Version: 3;
-  Type: 0;
+  Version: number;
+  Type: number;
   FileReferences: FileReferences;
   HitAreas: HitArea[];
   Controllers: Controllers;
