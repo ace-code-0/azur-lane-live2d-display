@@ -2,17 +2,17 @@ import { getModelMotions } from './live2dEngineBridge';
 
 import type { ModelMotion, ModelSettings } from './modelSettings';
 
-type MotionCurveTarget = 'Model' | 'Parameter' | 'PartOpacity';
+type Motion3CurveTarget = 'Model' | 'Parameter' | 'PartOpacity';
 
-type MotionCurve = {
-  Target: MotionCurveTarget;
+type Motion3Curve = {
+  Target: Motion3CurveTarget;
   Id: string;
   Segments: number[];
 };
 
-type MotionFile = {
+type Motion3File = {
   Version: number;
-  Curves: MotionCurve[];
+  Curves: Motion3Curve[];
 };
 
 const LINEAR_SEGMENT = 0;
@@ -20,7 +20,7 @@ const BEZIER_SEGMENT = 1;
 const STEPPED_SEGMENT = 2;
 const INVERSE_STEPPED_SEGMENT = 3;
 
-export async function getMotionParameterTargetValue(
+export async function getMotion3ParameterTargetValue(
   modelUrl: string,
   settings: ModelSettings,
   motionReference: string,
@@ -32,7 +32,7 @@ export async function getMotionParameterTargetValue(
     return undefined;
   }
 
-  const motionFile = await loadMotionFile(
+  const motionFile = await loadMotion3File(
     resolveModelFileUrl(modelUrl, motion.File),
   );
   const curve = motionFile.Curves.find(
@@ -56,21 +56,21 @@ function findReferencedMotion(
   return motions.find(({ File }) => File !== undefined);
 }
 
-async function loadMotionFile(url: string): Promise<MotionFile> {
+async function loadMotion3File(url: string): Promise<Motion3File> {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(`Failed to load motion file: ${response.status} ${url}`);
+    throw new Error(`Failed to load motion3 file: ${response.status} ${url}`);
   }
 
-  return (await response.json()) as MotionFile;
+  return (await response.json()) as Motion3File;
 }
 
 function resolveModelFileUrl(modelUrl: string, file: string): string {
   return new URL(file, new URL(modelUrl, window.location.href)).toString();
 }
 
-function getFinalCurveValue(curve: MotionCurve): number | undefined {
+function getFinalCurveValue(curve: Motion3Curve): number | undefined {
   const { Segments } = curve;
 
   if (Segments.length < 2) {

@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
 
 import { setModelParameter } from './live2dEngineBridge';
-import { getMotionParameterTargetValue } from './motionFile';
+import { getMotion3ParameterTargetValue } from './motion3File';
 
 import type { PixiApplication } from './app';
 import type { Cubism4Model } from './model';
@@ -180,7 +180,7 @@ async function createParamHitTargets(
 
   const targets = await Promise.all(
     settings.Controllers.ParamHit.Items.map(async (item) => {
-      const targetValue = await getMotionParameterTargetValue(
+      const targetValue = await getMotion3ParameterTargetValue(
         modelUrl,
         settings,
         item.MaxMtn,
