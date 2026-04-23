@@ -1,5 +1,7 @@
-export type Variable = {
+export type VarFloats = {
+  // 变量名
   Name: string;
+  // Type 1 条件；Type 2 操作
   Type: 1 | 2;
   Code: string;
 };
@@ -17,7 +19,7 @@ export type Motion = {
   Text?: string;
   Command?: string;
   PostCommand?: string;
-  VarFloats?: Variable[];
+  VarFloats?: VarFloats[];
   Weight?: number;
   Speed?: number;
   MotionDuration?: number;
@@ -25,6 +27,11 @@ export type Motion = {
   Choices?: Choice[];
 };
 
+// Motion group 名称来自模型配置，不在类型层硬编码。
+// 常见约定：Idle 空闲循环，Start 启动动作，Tap/TapArea 点击触发，
+// Shake 设备晃动，Tick 定时触发，Leave 长时间无操作触发。
+// 当前代码只特殊处理 Idle；点击由 HitAreas.Motion 和背景 Tap背景 触发，
+// 其他分组需要通过配置引用、KeyTrigger、ParamHit 或 start_mtn 命令触发。
 export type MotionGroups = Record<string, Motion[]>;
 
 export type HitArea = {
