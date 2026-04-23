@@ -45,7 +45,7 @@ export class ModelDialogElement extends LitElement {
       position: absolute;
       left: 50%;
       bottom: max(32px, env(safe-area-inset-bottom));
-      width: min(360px, calc(100vw - 40px)); /* Further reduced width */
+      width: min(360px, calc(100vw - 40px)); /* Restored stable width */
       padding: 14px 18px;
       border: 1px solid rgb(255 255 255 / 12%);
       border-radius: 12px;
@@ -67,7 +67,7 @@ export class ModelDialogElement extends LitElement {
 
     .text {
       margin: 0;
-      font-size: 14px; /* Slightly smaller for compact look */
+      font-size: 14px;
       font-weight: 500;
       line-height: 1.5;
       overflow-wrap: anywhere;

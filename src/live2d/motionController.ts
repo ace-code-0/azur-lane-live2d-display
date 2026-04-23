@@ -548,6 +548,25 @@ export function createMotionController(
     return started;
   }
 
+  let currentAudio: HTMLAudioElement | undefined;
+
+  function playSound(soundPath: string | undefined): void {
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = undefined;
+    }
+
+    if (!soundPath) {
+      return;
+    }
+
+    const audio = new Audio(soundPath);
+    currentAudio = audio;
+    audio.play().catch((error) => {
+      console.warn('[live2d-motion] Failed to play audio:', soundPath, error);
+    });
+  }
+
   async function playPresetMotionBufferItem(
     active: ActiveMotion,
     requestId: number,
@@ -557,6 +576,7 @@ export function createMotionController(
     modelSettingsBridge.applyMotionCommand(motion);
     motionVariables.applyAssignments(motion);
     showMotionDialog(motion);
+    playSound(motion.Sound);
 
     presetMotionBufferState.active = active;
     presetMotionBufferState.requestId = requestId;
