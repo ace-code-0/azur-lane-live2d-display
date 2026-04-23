@@ -5,7 +5,7 @@ export {
 } from 'untitled-pixi-live2d-engine/cubism';
 
 import type { Cubism4Model } from './model';
-import type { Motion, Settings } from './modelSettings';
+import type { FileReferences, Motion, Settings } from './modelSettings';
 
 export type ModelSettingsBridge = {
   applyInitialSettings(): void;
@@ -67,6 +67,7 @@ export function createEngineModelSettings(
 ): EngineModelSettings {
   return {
     ...settings,
+    FileReferences: createEngineFileReferences(settings),
     url: modelUrl,
     Groups: [
       {
@@ -85,12 +86,53 @@ export function createEngineModelSettings(
 
 export function isExecutableModelMotion(motion: Motion): boolean {
   return (
-    motion.File !== undefined ||
-    motion.Command !== undefined ||
-    motion.PostCommand !== undefined ||
-    motion.MotionDuration !== undefined ||
-    (motion.VarFloats?.some(({ Type }) => Type === 2) ?? false)
+    isEnabledModelMotion(motion) &&
+    (motion.File !== undefined ||
+      motion.Command !== undefined ||
+      motion.PostCommand !== undefined ||
+      motion.MotionDuration !== undefined ||
+      (motion.VarFloats?.some(({ Type }) => Type === 2) ?? false))
   );
+}
+
+export function isEnabledModelMotion(motion: Motion): boolean {
+  return motion.Enabled !== false;
+}
+
+function createEngineFileReferences(settings: Settings): FileReferences {
+  const { FileReferences } = settings;
+
+  return {
+    ...FileReferences,
+    Moc: encodeModelFilePath(FileReferences.Moc),
+    Textures: FileReferences.Textures.map(encodeModelFilePath),
+    Physics: encodeModelFilePath(FileReferences.Physics),
+    PhysicsV2: {
+      ...FileReferences.PhysicsV2,
+      File: encodeModelFilePath(FileReferences.PhysicsV2.File),
+    },
+    Motions: Object.fromEntries(
+      Object.entries(FileReferences.Motions).map(([group, motions]) => [
+        group,
+        motions.map((motion) => ({
+          ...motion,
+          FileLoop: group.startsWith('Idle') ? false : motion.FileLoop,
+          File:
+            motion.File === undefined
+              ? undefined
+              : encodeModelFilePath(motion.File),
+          Sound:
+            motion.Sound === undefined
+              ? undefined
+              : encodeModelFilePath(motion.Sound),
+        })),
+      ]),
+    ),
+  };
+}
+
+function encodeModelFilePath(path: string): string {
+  return path.split('/').map(encodeURIComponent).join('/');
 }
 
 export function createModelSettingsBridge(

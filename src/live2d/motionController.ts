@@ -1,18 +1,18 @@
 import {
   createModelSettingsBridge,
   getModelMotions,
-  isExecutableModelMotion,
   MotionPriority,
 } from './live2dEngineBridge';
+import { createMotionSelector } from './motionSelection';
+import { MotionVariableStore } from './motionVariables';
 
 import type { Cubism4Model } from './model';
 import type { ModelDialogElement } from '../ui/modelDialog';
 import type { Motion, Settings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
-const SHAKE_ACCELERATION_THRESHOLD = 18;
-const SHAKE_COOLDOWN_MS = 1000;
-const TICK_INTERVAL_MS = 1000;
+const IDLE_STATE_GROUP_PATTERN = /^Idle(?:$|\d)/;
+const IDLE_INTERLUDE_GROUP_PATTERN = /^Idle#/;
 
 type TouchMotionState =
   | {
@@ -29,6 +29,25 @@ type TouchMotionState =
       requestId: number;
       action: TouchAction;
       motion: Motion;
+    };
+
+type QueuedMotion = {
+  group: string;
+  index: number;
+  motion: Motion;
+  priority: MotionPriority;
+};
+
+type MotionQueueState =
+  | {
+      status: 'idle';
+    }
+  | {
+      status: 'playing';
+      requestId: number;
+      active: QueuedMotion;
+      remaining: QueuedMotion[];
+      onComplete?: () => void;
     };
 
 type MotionManagerState = {
@@ -70,9 +89,13 @@ export function createMotionController(
   debugTouch: boolean,
 ): MotionController {
   const internalModel = model.internalModel;
-  const motionVariables = new Map<string, number>([['idle', 0]]);
+  const motionVariables = new MotionVariableStore(modelSettings);
+  const motionSelector = createMotionSelector(modelSettings, motionVariables);
   let touchMotionState: TouchMotionState = { status: 'idle' };
+  let motionQueueState: MotionQueueState = { status: 'idle' };
   let leaveTimer: number | undefined;
+  let idleRequestId = 0;
+  let nextIdlePhase: 'state' | 'interlude' = 'state';
   let nextRequestId = 1;
 
   if (!internalModel) {
@@ -91,20 +114,22 @@ export function createMotionController(
     installMotionDebugControls();
   }
 
-  installShakeMotion();
-  installTickMotion();
-
   motionManager.on('motionFinish', () => {
-    if (touchMotionState.status !== 'playing') {
-      requestIdleMotion();
+    if (touchMotionState.status === 'playing') {
+      finishTouchMotion(
+        touchMotionState.requestId,
+        touchMotionState.action,
+        touchMotionState.motion,
+      );
       return;
     }
 
-    finishTouchMotion(
-      touchMotionState.requestId,
-      touchMotionState.action,
-      touchMotionState.motion,
-    );
+    if (motionQueueState.status === 'playing') {
+      finishQueuedMotion(motionQueueState.requestId);
+      return;
+    }
+
+    requestIdleMotion();
   });
 
   function getCurrentMotion(): { group?: string; index?: number } {
@@ -131,7 +156,7 @@ export function createMotionController(
         currentIndex: currentMotion.index,
       },
       motion,
-      motionVariables: Object.fromEntries(motionVariables),
+      motionVariables: motionVariables.entries(),
       touchMotionState,
     };
   }
@@ -160,7 +185,7 @@ export function createMotionController(
 
   function startInitialMotion(): void {
     if (!tryRunPresetMotion('Start')) {
-      void startIdleMotion();
+      requestIdleMotion();
     }
 
     resetLeaveTimer();
@@ -185,7 +210,7 @@ export function createMotionController(
       leaveTimer = undefined;
 
       if (touchMotionState.status === 'idle') {
-        tryRunMotionGroup(leaveMotion.group);
+        tryRunPresetMotion('Leave');
       }
 
       resetLeaveTimer();
@@ -209,327 +234,223 @@ export function createMotionController(
     };
   }
 
-  function hasMotionGroup(group: string): boolean {
-    return Object.prototype.hasOwnProperty.call(
-      modelSettings.FileReferences.Motions,
-      group,
-    );
-  }
-
-  function installShakeMotion(): void {
-    if (getPresetMotionGroups('Shake').length === 0) {
-      return;
-    }
-
-    let lastShakeTime = 0;
-
-    window.addEventListener('devicemotion', (event) => {
-      const acceleration = event.accelerationIncludingGravity;
-
-      if (
-        acceleration?.x === null ||
-        acceleration?.x === undefined ||
-        acceleration.y === null ||
-        acceleration.y === undefined ||
-        acceleration.z === null ||
-        acceleration.z === undefined
-      ) {
-        return;
-      }
-
-      const now = performance.now();
-
-      if (now - lastShakeTime < SHAKE_COOLDOWN_MS) {
-        return;
-      }
-
-      const force = Math.hypot(acceleration.x, acceleration.y, acceleration.z);
-
-      if (force < SHAKE_ACCELERATION_THRESHOLD) {
-        return;
-      }
-
-      lastShakeTime = now;
-      notifyUserActivity();
-      tryRunPresetMotion('Shake');
-    });
-  }
-
-  function installTickMotion(): void {
-    if (getPresetMotionGroups('Tick').length === 0) {
-      return;
-    }
-
-    window.setInterval(() => {
-      if (touchMotionState.status !== 'idle') {
-        return;
-      }
-
-      tryRunPresetMotion('Tick');
-    }, TICK_INTERVAL_MS);
-  }
-
   function requestIdleMotion(): void {
-    window.setTimeout(() => {
-      if (touchMotionState.status !== 'idle') {
-        return;
-      }
+    const requestId = ++idleRequestId;
 
-      void startIdleMotion();
+    window.setTimeout(() => {
+      void tryStartQueuedIdleMotion(requestId);
     }, 0);
   }
 
-  async function startIdleMotion(): Promise<void> {
-    const idleMotion = selectIdleMotion();
-
-    if (!idleMotion) {
-      if (debugTouch) {
-        console.log('[live2d-motion] idle skipped', {
-          variables: Object.fromEntries(motionVariables),
-        });
-      }
-
+  async function tryStartQueuedIdleMotion(requestId: number): Promise<void> {
+    if (requestId !== idleRequestId || touchMotionState.status !== 'idle') {
       return;
     }
 
-    const started = await model.motion(
-      idleMotion.group,
-      idleMotion.index,
-      MotionPriority.IDLE,
-    );
+    const started = await startIdleMotion();
 
-    if (started && debugTouch) {
-      console.log('[live2d-motion] idle playing', {
-        group: idleMotion.group,
-        motionIndex: idleMotion.index,
-        variables: Object.fromEntries(motionVariables),
+    if (!started && debugTouch && requestId === idleRequestId) {
+      console.log('[live2d-motion] idle not started', {
+        variables: motionVariables.entries(),
       });
     }
   }
 
-  function selectIdleMotion(): { group: string; index: number } | undefined {
-    return selectPresetMotion('Idle');
-  }
+  async function startIdleMotion(): Promise<boolean> {
+    const idleMotions = selectIdleMotions();
 
-  function selectPresetMotion(
-    groupPrefix: string,
-  ): { group: string; index: number } | undefined {
-    const candidates = getPresetMotionGroups(groupPrefix).flatMap((group) => {
-      const motions = getModelMotions(modelSettings, group);
+    if (idleMotions.length === 0) {
+      if (debugTouch) {
+        console.log('[live2d-motion] idle skipped', {
+          variables: motionVariables.entries(),
+        });
+      }
 
-      return motions.flatMap((motion, index) =>
-        isExecutableModelMotion(motion) && isMotionConditionMatched(motion)
-          ? [{ group, index, motion }]
-          : [],
-      );
-    });
-
-    const candidateIndex = pickWeightedMotionIndex(
-      candidates.map(({ motion }) => motion),
-      candidates.map((_, index) => index),
-    );
-
-    if (candidateIndex === undefined) {
-      return undefined;
+      return false;
     }
 
-    const candidate = candidates[candidateIndex];
+    const started = await startMotionQueue(idleMotions, () => {
+      nextIdlePhase =
+        nextIdlePhase === 'state' && hasIdleInterludeMotion()
+          ? 'interlude'
+          : 'state';
+    });
 
-    return { group: candidate.group, index: candidate.index };
+    return started;
+  }
+
+  function selectIdleMotions(): QueuedMotion[] {
+    if (nextIdlePhase === 'interlude') {
+      return motionSelector.selectEachGroup(
+        motionSelector.getGroupsByPattern(IDLE_INTERLUDE_GROUP_PATTERN),
+      ).map(toNormalQueuedMotion);
+    }
+
+    return motionSelector.selectEachGroup(
+      motionSelector.getGroupsByPattern(IDLE_STATE_GROUP_PATTERN),
+    ).map((motion) => ({
+      ...motion,
+      priority: MotionPriority.IDLE,
+    }));
+  }
+
+  function toNormalQueuedMotion(selected: {
+    group: string;
+    index: number;
+    motion: Motion;
+  }): QueuedMotion {
+    return {
+      ...selected,
+      priority: MotionPriority.NORMAL,
+    };
+  }
+
+  async function startMotionQueue(
+    motions: QueuedMotion[],
+    onComplete?: () => void,
+  ): Promise<boolean> {
+    if (motions.length === 0 || motionQueueState.status !== 'idle') {
+      return false;
+    }
+
+    const [active, ...remaining] = motions;
+    const requestId = nextRequestId++;
+    const started = await startQueuedMotion(active, requestId, remaining, onComplete);
+
+    if (!started && debugTouch) {
+      console.log('[live2d-motion] queued motion rejected', {
+        group: active.group,
+        motionIndex: active.index,
+        variables: motionVariables.entries(),
+      });
+    }
+
+    return started;
+  }
+
+  async function startQueuedMotion(
+    active: QueuedMotion,
+    requestId: number,
+    remaining: QueuedMotion[],
+    onComplete?: () => void,
+  ): Promise<boolean> {
+    modelSettingsBridge.applyMotionCommand(active.motion);
+    motionVariables.applyAssignments(active.motion);
+    showMotionDialog(active.motion);
+
+    motionQueueState = {
+      status: 'playing',
+      requestId,
+      active,
+      remaining,
+      onComplete,
+    };
+
+    if (!active.motion.File) {
+      finishQueuedMotion(requestId);
+      return true;
+    }
+
+    const started = await model
+      .motion(active.group, active.index, active.priority)
+      .catch((error: unknown) => {
+        console.error('[live2d-motion] queued motion failed', {
+          group: active.group,
+          motionIndex: active.index,
+          error,
+        });
+
+        return false;
+      });
+
+    if (!started && motionQueueState.status === 'playing') {
+      motionQueueState = { status: 'idle' };
+    }
+
+    if (started && debugTouch) {
+      console.log('[live2d-motion] queued motion playing', {
+        group: active.group,
+        motionIndex: active.index,
+        variables: motionVariables.entries(),
+      });
+    }
+
+    return started;
+  }
+
+  function finishQueuedMotion(requestId: number): void {
+    if (
+      motionQueueState.status !== 'playing' ||
+      motionQueueState.requestId !== requestId
+    ) {
+      return;
+    }
+
+    const { active, remaining, onComplete } = motionQueueState;
+
+    modelSettingsBridge.applyMotionPostCommand(active.motion);
+
+    if (remaining.length > 0) {
+      const [next, ...rest] = remaining;
+
+      void startQueuedMotion(next, requestId, rest, onComplete);
+      return;
+    }
+
+    motionQueueState = { status: 'idle' };
+    onComplete?.();
+    requestIdleMotion();
+  }
+
+  function hasIdleInterludeMotion(): boolean {
+    return (
+      motionSelector.selectEachGroup(
+        motionSelector.getGroupsByPattern(IDLE_INTERLUDE_GROUP_PATTERN),
+      ).length > 0
+    );
   }
 
   function getPresetMotionGroups(groupPrefix: string): string[] {
-    return Object.keys(modelSettings.FileReferences.Motions).filter((group) =>
-      group.startsWith(groupPrefix),
-    );
-  }
-
-  function selectMotionIndex(group: string): number | undefined {
-    const motions = getModelMotions(modelSettings, group);
-    const candidates = motions.flatMap((motion, index) =>
-      isExecutableModelMotion(motion) && isMotionConditionMatched(motion)
-        ? [index]
-        : [],
-    );
-
-    return pickWeightedMotionIndex(motions, candidates);
-  }
-
-  function pickWeightedMotionIndex(
-    motions: Motion[],
-    indexes: number[],
-  ): number | undefined {
-    if (indexes.length === 0) {
-      return undefined;
-    }
-
-    const totalWeight = indexes.reduce(
-      (total, index) => total + Math.max(motions[index].Weight ?? 1, 0),
-      0,
-    );
-
-    if (totalWeight <= 0) {
-      return indexes[0];
-    }
-
-    let roll = Math.random() * totalWeight;
-
-    for (const index of indexes) {
-      roll -= Math.max(motions[index].Weight ?? 1, 0);
-
-      if (roll <= 0) {
-        return index;
-      }
-    }
-
-    return indexes[indexes.length - 1];
-  }
-
-  function isMotionConditionMatched(motion: Motion): boolean {
-    return (
-      motion.VarFloats?.every((variable) => {
-        if (variable.Type !== 1) {
-          return true;
-        }
-
-        const expectedValue = parseEqualCode(variable.Code);
-
-        return (
-          expectedValue === undefined ||
-          (motionVariables.get(variable.Name) ?? 0) === expectedValue
-        );
-      }) ?? true
-    );
-  }
-
-  function applyMotionAssignments(motion: Motion): void {
-    for (const variable of motion.VarFloats ?? []) {
-      if (variable.Type !== 2) {
-        continue;
-      }
-
-      const value = parseAssignCode(variable.Code);
-
-      if (value !== undefined) {
-        motionVariables.set(variable.Name, value);
-      }
-    }
-  }
-
-  function parseEqualCode(code: string): number | undefined {
-    return parseVariableCode(code, 'equal');
-  }
-
-  function parseAssignCode(code: string): number | undefined {
-    return parseVariableCode(code, 'assign');
-  }
-
-  function parseVariableCode(
-    code: string,
-    operator: 'assign' | 'equal',
-  ): number | undefined {
-    const [actualOperator, value] = code.trim().split(/\s+/, 2);
-
-    if (actualOperator !== operator || value === undefined) {
-      return undefined;
-    }
-
-    const parsedValue = Number(value);
-
-    return Number.isFinite(parsedValue) ? parsedValue : undefined;
-  }
-
-  function parseMotionReference(reference: string): {
-    group: string;
-    motionName?: string;
-  } {
-    const [group, motionName] = reference.split(':', 2);
-
-    return { group, motionName };
-  }
-
-  function findMotionIndex(
-    group: string,
-    motionName: string | undefined,
-  ): number | undefined {
-    if (motionName === undefined) {
-      return selectMotionIndex(group);
-    }
-
-    const motionIndex = getModelMotions(modelSettings, group).findIndex(
-      ({ Name }) => Name === motionName,
-    );
-
-    if (motionIndex < 0) {
-      throw new Error(`Motion not found in ${group}: ${motionName}`);
-    }
-
-    return motionIndex;
-  }
-
-  function getMotion(group: string, motionIndex: number): Motion {
-    const motion = getModelMotions(modelSettings, group)[motionIndex];
-
-    if (!motion) {
-      throw new Error(`Motion index not found in ${group}: ${motionIndex}`);
-    }
-
-    return motion;
+    return motionSelector.getPresetGroups(groupPrefix);
   }
 
   function tryRunReferencedMotion(reference: string): boolean {
-    const { group, motionName } = parseMotionReference(reference);
+    const selected = motionSelector.selectReference(reference);
 
-    if (!hasMotionGroup(group)) {
+    if (!selected) {
       return false;
     }
 
-    const motionIndex = findMotionIndex(group, motionName);
-
-    if (motionIndex === undefined) {
-      return false;
-    }
-
-    const motion = getMotion(group, motionIndex);
-
-    if (!isMotionConditionMatched(motion)) {
-      return false;
-    }
-
-    runMotion(group, motionIndex, motion);
+    runMotion(selected.group, selected.index, selected.motion);
     return true;
   }
 
   function tryRunPresetMotion(groupPrefix: string): boolean {
-    const motion = selectPresetMotion(groupPrefix);
+    const motions = motionSelector.selectPresetQueue(groupPrefix);
 
-    if (!motion) {
+    if (motions.length === 0 || motionQueueState.status !== 'idle') {
       return false;
     }
 
-    runMotionGroup(motion.group, motion.index);
+    void startMotionQueue(motions.map(toNormalQueuedMotion));
     return true;
   }
 
   function tryRunMotionGroup(group: string): boolean {
-    if (!hasMotionGroup(group)) {
+    const selected = motionSelector.selectGroup(group);
+
+    if (!selected) {
       return false;
     }
 
-    const motionIndex = selectMotionIndex(group);
-
-    if (motionIndex === undefined) {
-      return false;
-    }
-
-    runMotionGroup(group, motionIndex);
+    runMotion(selected.group, selected.index, selected.motion);
     return true;
   }
 
   function runMotionGroup(group: string, motionIndex: number): void {
-    const motion = getMotion(group, motionIndex);
+    const motion = motionSelector.getMotion(group, motionIndex);
 
-    if (!isMotionConditionMatched(motion)) {
+    if (!motionVariables.matches(motion)) {
       return;
     }
 
@@ -537,25 +458,18 @@ export function createMotionController(
   }
 
   function runReferencedMotion(reference: string): void {
-    const { group, motionName } = parseMotionReference(reference);
-    const motionIndex = findMotionIndex(group, motionName);
+    const selected = motionSelector.selectReference(reference);
 
-    if (motionIndex === undefined) {
-      throw new Error(`No executable motion in group: ${group}`);
-    }
-
-    const motion = getMotion(group, motionIndex);
-
-    if (!isMotionConditionMatched(motion)) {
+    if (!selected) {
       return;
     }
 
-    runMotion(group, motionIndex, motion);
+    runMotion(selected.group, selected.index, selected.motion);
   }
 
   function runMotion(group: string, motionIndex: number, motion: Motion): void {
     modelSettingsBridge.applyMotionCommand(motion);
-    applyMotionAssignments(motion);
+    motionVariables.applyAssignments(motion);
     showMotionDialog(motion);
 
     if (motion.File) {
@@ -594,7 +508,10 @@ export function createMotionController(
   }
 
   function playTouchMotion(action: TouchAction): void {
-    if (touchMotionState.status !== 'idle') {
+    if (
+      touchMotionState.status !== 'idle' ||
+      motionQueueState.status !== 'idle'
+    ) {
       if (debugTouch) {
         console.log('[live2d-touch] request ignored', {
           action,
@@ -605,21 +522,28 @@ export function createMotionController(
       return;
     }
 
-    const motionIndex = action.motionIndex ?? selectMotionIndex(action.group);
+    const selected =
+      action.motionIndex === undefined
+        ? motionSelector.selectGroup(action.group)
+        : {
+            group: action.group,
+            index: action.motionIndex,
+            motion: motionSelector.getMotion(action.group, action.motionIndex),
+          };
     const motion =
-      motionIndex === undefined
+      selected === undefined
         ? undefined
-        : getMotion(action.group, motionIndex);
+        : selected.motion;
 
     if (
-      motionIndex === undefined ||
+      selected === undefined ||
       motion === undefined ||
-      !isMotionConditionMatched(motion)
+      !motionVariables.matches(motion)
     ) {
       if (debugTouch) {
         console.log('[live2d-touch] no matched motion', {
           action,
-          variables: Object.fromEntries(motionVariables),
+          variables: motionVariables.entries(),
         });
       }
 
@@ -642,13 +566,13 @@ export function createMotionController(
     showMotionDialog(motion);
 
     if (!motion.File) {
-      applyMotionAssignments(motion);
+      motionVariables.applyAssignments(motion);
       scheduleTouchMotionFinish(requestId, action, motion);
       return;
     }
 
     void model
-      .motion(action.group, motionIndex, MotionPriority.NORMAL)
+      .motion(action.group, selected.index, MotionPriority.NORMAL)
       .then((started) => {
         if (!started) {
           if (
@@ -662,7 +586,7 @@ export function createMotionController(
             console.log('[live2d-touch] request rejected', {
               requestId,
               action,
-              motionIndex,
+              motionIndex: selected.index,
             });
           }
 
@@ -678,7 +602,7 @@ export function createMotionController(
             console.log('[live2d-touch] stale request ignored', {
               requestId,
               action,
-              motionIndex,
+              motionIndex: selected.index,
               touchMotionState,
             });
           }
@@ -692,15 +616,15 @@ export function createMotionController(
           action,
           motion,
         };
-        applyMotionAssignments(motion);
+        motionVariables.applyAssignments(motion);
         scheduleTouchMotionFinish(requestId, action, motion);
 
         if (debugTouch) {
           console.log('[live2d-touch] request playing', {
             requestId,
             action,
-            motionIndex,
-            variables: Object.fromEntries(motionVariables),
+            motionIndex: selected.index,
+            variables: motionVariables.entries(),
           });
         }
       })
@@ -767,7 +691,10 @@ export function createMotionController(
     notifyUserActivity,
 
     playPresetMotion(groupPrefix: string): boolean {
-      if (touchMotionState.status !== 'idle') {
+      if (
+        touchMotionState.status !== 'idle' ||
+        motionQueueState.status !== 'idle'
+      ) {
         return false;
       }
 
@@ -778,7 +705,7 @@ export function createMotionController(
     startInitialMotion,
 
     startIdleMotion(): void {
-      void startIdleMotion();
+      requestIdleMotion();
     },
 
     startMotion(reference: string): void {

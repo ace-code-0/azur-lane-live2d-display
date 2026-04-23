@@ -25,14 +25,17 @@ export type Motion = {
   MotionDuration?: number;
   TextDuration?: number;
   Choices?: Choice[];
+  Enabled?: boolean;
 };
 
-// Motion group 名称来自模型配置，不在类型层硬编码。
-// 常见约定：Idle 空闲循环，Start 启动动作，Tap/TapArea 点击触发，
-// Shake 设备晃动，Tick 定时触发，Leave 长时间无操作触发。
-// 当前代码按前缀特殊处理 Idle、Tap、TapArea、Start、Shake、Tick、Leave。
-// 点击仍优先使用 HitAreas.Motion 和背景 Tap背景 的显式配置。
-// 其他分组需要通过配置引用、KeyTrigger、ParamHit 或 start_mtn 命令触发。
+// MotionGroups 有预定义部分，需要特殊处理，正则匹配group前缀
+// Idle
+// Tap
+// TapArea
+// Start
+// Shake
+// Tick
+// Leave
 export type MotionGroups = Record<string, Motion[]>;
 
 export type HitArea = {

@@ -43,6 +43,7 @@
       "Start": [
         {
           "Name": "登录",
+          "Enabled": false,
           "File": "Motions_Start_0_File_0.json",
           "Sound": "Motions_Start_0_Sound_0.wav",
           "Text": "指挥官看起来很热的样子……难、难道说是指挥官看到了这样的阿尔萨斯要在邮轮上光天化日之下就……！不、不不行！阿、阿尔萨斯必须停止这种想法……",
@@ -56,6 +57,7 @@
         },
         {
           "Name": "登录-鼠标追踪开",
+          "Enabled": false,
           "File": "Motions_Start_0_File_0.json",
           "Sound": "Motions_Start_0_Sound_0.wav",
           "Text": "指挥官看起来很热的样子……难、难道说是指挥官看到了这样的阿尔萨斯要在邮轮上光天化日之下就……！不、不不行！阿、阿尔萨斯必须停止这种想法……",
@@ -69,6 +71,7 @@
         },
         {
           "Name": "登录-无动画",
+          "Enabled": false,
           "Command": "mouse_tracking disable;parameters lock Paramring 0;parameters set ParamALLS 0.1",
           "MotionDuration": 1,
           "VarFloats": [
@@ -80,6 +83,7 @@
         },
         {
           "Name": "登录-鼠标追踪开-无动画",
+          "Enabled": false,
           "Command": "parameters lock Paramring 0;parameters set ParamALLS 0.1",
           "MotionDuration": 1,
           "VarFloats": [
@@ -91,6 +95,7 @@
         },
         {
           "Name": "登录2",
+          "Enabled": false,
           "File": "Motions_Start_0_File_0.json",
           "Sound": "Motions_Start_0_Sound_0.wav",
           "Text": "指挥官看起来很热的样子……难、难道说是指挥官看到了这样的阿尔萨斯要在邮轮上光天化日之下就……！不、不不行！阿、阿尔萨斯必须停止这种想法……",
@@ -104,6 +109,7 @@
         },
         {
           "Name": "登录-鼠标追踪开2",
+          "Enabled": false,
           "File": "Motions_Start_0_File_0.json",
           "Sound": "Motions_Start_0_Sound_0.wav",
           "Text": "指挥官看起来很热的样子……难、难道说是指挥官看到了这样的阿尔萨斯要在邮轮上光天化日之下就……！不、不不行！阿、阿尔萨斯必须停止这种想法……",
@@ -117,6 +123,7 @@
         },
         {
           "Name": "登录-无动画2",
+          "Enabled": false,
           "Command": "mouse_tracking disable;parameters lock Paramring 1;parameters set ParamALLS 0.1",
           "MotionDuration": 1,
           "VarFloats": [
@@ -128,6 +135,7 @@
         },
         {
           "Name": "登录-鼠标追踪开-无动画2",
+          "Enabled": false,
           "Command": "parameters lock Paramring 1;parameters set ParamALLS 0.1",
           "MotionDuration": 1,
           "VarFloats": [
