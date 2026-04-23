@@ -571,13 +571,11 @@ export function createMotionController(
     advancePresetCycleCursor(cycleGroup, completedReference);
 
     if (buffer.length > 0) {
-      refillPresetMotionBuffer(presetPrefix, active.priority, requestId);
-      if (presetMotionBufferState.active) {
-        void playPresetMotionBufferItem(
-          presetMotionBufferState.active,
-          requestId,
-        );
-      }
+      const [next, ...rest] = buffer;
+      presetMotionBufferState.active = next;
+      presetMotionBufferState.buffer = rest;
+      presetMotionBufferState.requestId = requestId;
+      void playPresetMotionBufferItem(next, requestId);
       return;
     }
 
@@ -611,6 +609,7 @@ export function createMotionController(
       const [next, ...rest] = presetMotionBufferState.buffer;
       presetMotionBufferState.active = next;
       presetMotionBufferState.buffer = rest;
+      presetMotionBufferState.requestId = requestId;
       void playPresetMotionBufferItem(next, requestId);
       return;
     }
@@ -637,29 +636,6 @@ export function createMotionController(
     presetMotionBufferState = { buffer: [] };
     resetIdlePresetMotionBuffer();
     requestIdleMotion();
-  }
-
-  function refillPresetMotionBuffer(
-    groupPrefix: string | undefined,
-    priority: MotionPriority,
-    requestId: number,
-  ): void {
-    if (!groupPrefix) {
-      presetMotionBufferState.active = undefined;
-      presetMotionBufferState.buffer = [];
-      return;
-    }
-
-    const { cycleGroup, motions } = selectPresetCycleFromCursor(
-      groupPrefix,
-      priority,
-    );
-    const [active, ...buffer] = motions;
-    presetMotionBufferState.presetPrefix = groupPrefix;
-    presetMotionBufferState.cycleGroup = active ? cycleGroup : undefined;
-    presetMotionBufferState.requestId = requestId;
-    presetMotionBufferState.active = active;
-    presetMotionBufferState.buffer = buffer;
   }
 
   function advancePresetCycleCursor(

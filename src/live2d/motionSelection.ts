@@ -182,11 +182,7 @@ function createSelectedMotion(
 }
 
 function isPresetMotionGroup(group: string, prefix: string): boolean {
-  return new RegExp(`^${escapeRegExp(prefix)}(?:$|[^A-Za-z])`).test(group);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return group === prefix;
 }
 
 function pickWeightedMotionIndex(motions: MotionItem[]): number | undefined {

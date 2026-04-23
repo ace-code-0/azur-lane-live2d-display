@@ -30,7 +30,7 @@ export type MotionItem = {
   Enabled?: boolean;
 };
 
-// Motions 有预定义部分，需要特殊处理，正则匹配 group 前缀，每个预定义 Motion 周期，要执行其中的每个 Motion
+// Motions 有预定义部分，完全匹配时处理
 // Idle
 // Tap
 // TapArea
