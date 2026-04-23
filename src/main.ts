@@ -62,8 +62,14 @@ async function bootstrap(): Promise<void> {
 
   Object.assign(window, { pixiApp: app, live2dModel: model });
 
+  app.stage.on('pointerdown', () => {
+    motionController.notifyUserActivity();
+  });
+
   if (modelSettings.Controllers.KeyTrigger.Enabled) {
     window.addEventListener('keydown', (event) => {
+      motionController.notifyUserActivity();
+
       for (const item of modelSettings.Controllers.KeyTrigger.Items) {
         if (event.keyCode === item.Input) {
           motionController.startMotion(item.DownMtn);
@@ -76,7 +82,7 @@ async function bootstrap(): Promise<void> {
     updateStageHitArea(app);
     fitModel(app, model, modelSettings.Options);
   });
-  motionController.startIdleMotion();
+  motionController.startInitialMotion();
 }
 
 bootstrap().catch((error: unknown) => {

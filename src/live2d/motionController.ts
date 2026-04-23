@@ -10,6 +10,10 @@ import type { ModelDialogElement } from '../ui/modelDialog';
 import type { Motion, Settings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
+const SHAKE_ACCELERATION_THRESHOLD = 18;
+const SHAKE_COOLDOWN_MS = 1000;
+const TICK_INTERVAL_MS = 1000;
+
 type TouchMotionState =
   | {
       status: 'idle';
@@ -43,13 +47,18 @@ type MotionDebugWindow = Window &
   typeof globalThis & {
     live2dDebug?: {
       getState(): MotionDebugState;
+      notifyUserActivity(): void;
+      startInitialMotion(): void;
       startIdleMotion(): void;
       startMotion(reference: string): void;
     };
   };
 
 export type MotionController = {
+  notifyUserActivity(): void;
+  playPresetMotion(groupPrefix: string): boolean;
   playTouchMotion(action: TouchAction): void;
+  startInitialMotion(): void;
   startIdleMotion(): void;
   startMotion(reference: string): void;
 };
@@ -63,6 +72,7 @@ export function createMotionController(
   const internalModel = model.internalModel;
   const motionVariables = new Map<string, number>([['idle', 0]]);
   let touchMotionState: TouchMotionState = { status: 'idle' };
+  let leaveTimer: number | undefined;
   let nextRequestId = 1;
 
   if (!internalModel) {
@@ -80,6 +90,9 @@ export function createMotionController(
   if (debugTouch) {
     installMotionDebugControls();
   }
+
+  installShakeMotion();
+  installTickMotion();
 
   motionManager.on('motionFinish', () => {
     if (touchMotionState.status !== 'playing') {
@@ -127,6 +140,14 @@ export function createMotionController(
     (window as MotionDebugWindow).live2dDebug = {
       getState: getMotionDebugState,
 
+      notifyUserActivity(): void {
+        notifyUserActivity();
+      },
+
+      startInitialMotion(): void {
+        startInitialMotion();
+      },
+
       startIdleMotion(): void {
         void startIdleMotion();
       },
@@ -137,9 +158,120 @@ export function createMotionController(
     };
   }
 
+  function startInitialMotion(): void {
+    if (!tryRunPresetMotion('Start')) {
+      void startIdleMotion();
+    }
+
+    resetLeaveTimer();
+  }
+
+  function notifyUserActivity(): void {
+    resetLeaveTimer();
+  }
+
+  function resetLeaveTimer(): void {
+    const leaveMotion = getLeaveMotion();
+
+    if (!leaveMotion) {
+      return;
+    }
+
+    if (leaveTimer !== undefined) {
+      window.clearTimeout(leaveTimer);
+    }
+
+    leaveTimer = window.setTimeout(() => {
+      leaveTimer = undefined;
+
+      if (touchMotionState.status === 'idle') {
+        tryRunMotionGroup(leaveMotion.group);
+      }
+
+      resetLeaveTimer();
+    }, leaveMotion.timeoutMs);
+  }
+
+  function getLeaveMotion(): { group: string; timeoutMs: number } | undefined {
+    const group = getPresetMotionGroups('Leave')[0];
+
+    if (!group) {
+      return undefined;
+    }
+
+    const timeoutSeconds = Number(group.match(/^Leave(\d+)/)?.[1]);
+
+    return {
+      group,
+      timeoutMs: Number.isFinite(timeoutSeconds)
+        ? timeoutSeconds * 1000
+        : 30000,
+    };
+  }
+
+  function hasMotionGroup(group: string): boolean {
+    return Object.prototype.hasOwnProperty.call(
+      modelSettings.FileReferences.Motions,
+      group,
+    );
+  }
+
+  function installShakeMotion(): void {
+    if (getPresetMotionGroups('Shake').length === 0) {
+      return;
+    }
+
+    let lastShakeTime = 0;
+
+    window.addEventListener('devicemotion', (event) => {
+      const acceleration = event.accelerationIncludingGravity;
+
+      if (
+        acceleration?.x === null ||
+        acceleration?.x === undefined ||
+        acceleration.y === null ||
+        acceleration.y === undefined ||
+        acceleration.z === null ||
+        acceleration.z === undefined
+      ) {
+        return;
+      }
+
+      const now = performance.now();
+
+      if (now - lastShakeTime < SHAKE_COOLDOWN_MS) {
+        return;
+      }
+
+      const force = Math.hypot(acceleration.x, acceleration.y, acceleration.z);
+
+      if (force < SHAKE_ACCELERATION_THRESHOLD) {
+        return;
+      }
+
+      lastShakeTime = now;
+      notifyUserActivity();
+      tryRunPresetMotion('Shake');
+    });
+  }
+
+  function installTickMotion(): void {
+    if (getPresetMotionGroups('Tick').length === 0) {
+      return;
+    }
+
+    window.setInterval(() => {
+      if (touchMotionState.status !== 'idle') {
+        return;
+      }
+
+      tryRunPresetMotion('Tick');
+    }, TICK_INTERVAL_MS);
+  }
+
   function requestIdleMotion(): void {
     window.setTimeout(() => {
-      if (touchMotionState.status !== 'idle' || getCurrentMotion().group) {
+      if (touchMotionState.status !== 'idle') {
         return;
       }
 
@@ -148,9 +280,9 @@ export function createMotionController(
   }
 
   async function startIdleMotion(): Promise<void> {
-    const motionIndex = selectMotionIndex('Idle');
+    const idleMotion = selectIdleMotion();
 
-    if (motionIndex === undefined) {
+    if (!idleMotion) {
       if (debugTouch) {
         console.log('[live2d-motion] idle skipped', {
           variables: Object.fromEntries(motionVariables),
@@ -160,14 +292,56 @@ export function createMotionController(
       return;
     }
 
-    const started = await model.motion('Idle', motionIndex, MotionPriority.IDLE);
+    const started = await model.motion(
+      idleMotion.group,
+      idleMotion.index,
+      MotionPriority.IDLE,
+    );
 
     if (started && debugTouch) {
       console.log('[live2d-motion] idle playing', {
-        motionIndex,
+        group: idleMotion.group,
+        motionIndex: idleMotion.index,
         variables: Object.fromEntries(motionVariables),
       });
     }
+  }
+
+  function selectIdleMotion(): { group: string; index: number } | undefined {
+    return selectPresetMotion('Idle');
+  }
+
+  function selectPresetMotion(
+    groupPrefix: string,
+  ): { group: string; index: number } | undefined {
+    const candidates = getPresetMotionGroups(groupPrefix).flatMap((group) => {
+      const motions = getModelMotions(modelSettings, group);
+
+      return motions.flatMap((motion, index) =>
+        isExecutableModelMotion(motion) && isMotionConditionMatched(motion)
+          ? [{ group, index, motion }]
+          : [],
+      );
+    });
+
+    const candidateIndex = pickWeightedMotionIndex(
+      candidates.map(({ motion }) => motion),
+      candidates.map((_, index) => index),
+    );
+
+    if (candidateIndex === undefined) {
+      return undefined;
+    }
+
+    const candidate = candidates[candidateIndex];
+
+    return { group: candidate.group, index: candidate.index };
+  }
+
+  function getPresetMotionGroups(groupPrefix: string): string[] {
+    return Object.keys(modelSettings.FileReferences.Motions).filter((group) =>
+      group.startsWith(groupPrefix),
+    );
   }
 
   function selectMotionIndex(group: string): number | undefined {
@@ -303,6 +477,65 @@ export function createMotionController(
     return motion;
   }
 
+  function tryRunReferencedMotion(reference: string): boolean {
+    const { group, motionName } = parseMotionReference(reference);
+
+    if (!hasMotionGroup(group)) {
+      return false;
+    }
+
+    const motionIndex = findMotionIndex(group, motionName);
+
+    if (motionIndex === undefined) {
+      return false;
+    }
+
+    const motion = getMotion(group, motionIndex);
+
+    if (!isMotionConditionMatched(motion)) {
+      return false;
+    }
+
+    runMotion(group, motionIndex, motion);
+    return true;
+  }
+
+  function tryRunPresetMotion(groupPrefix: string): boolean {
+    const motion = selectPresetMotion(groupPrefix);
+
+    if (!motion) {
+      return false;
+    }
+
+    runMotionGroup(motion.group, motion.index);
+    return true;
+  }
+
+  function tryRunMotionGroup(group: string): boolean {
+    if (!hasMotionGroup(group)) {
+      return false;
+    }
+
+    const motionIndex = selectMotionIndex(group);
+
+    if (motionIndex === undefined) {
+      return false;
+    }
+
+    runMotionGroup(group, motionIndex);
+    return true;
+  }
+
+  function runMotionGroup(group: string, motionIndex: number): void {
+    const motion = getMotion(group, motionIndex);
+
+    if (!isMotionConditionMatched(motion)) {
+      return;
+    }
+
+    runMotion(group, motionIndex, motion);
+  }
+
   function runReferencedMotion(reference: string): void {
     const { group, motionName } = parseMotionReference(reference);
     const motionIndex = findMotionIndex(group, motionName);
@@ -317,6 +550,10 @@ export function createMotionController(
       return;
     }
 
+    runMotion(group, motionIndex, motion);
+  }
+
+  function runMotion(group: string, motionIndex: number, motion: Motion): void {
     modelSettingsBridge.applyMotionCommand(motion);
     applyMotionAssignments(motion);
     showMotionDialog(motion);
@@ -327,7 +564,17 @@ export function createMotionController(
         .then((started) => {
           if (started) {
             schedulePostCommand(motion);
+            return;
           }
+          requestIdleMotion();
+        })
+        .catch((error: unknown) => {
+          console.error('[live2d-motion] motion failed', {
+            group,
+            motionIndex,
+            error,
+          });
+          requestIdleMotion();
         });
       return;
     }
@@ -517,7 +764,18 @@ export function createMotionController(
   }
 
   return {
+    notifyUserActivity,
+
+    playPresetMotion(groupPrefix: string): boolean {
+      if (touchMotionState.status !== 'idle') {
+        return false;
+      }
+
+      return tryRunPresetMotion(groupPrefix);
+    },
+
     playTouchMotion,
+    startInitialMotion,
 
     startIdleMotion(): void {
       void startIdleMotion();
