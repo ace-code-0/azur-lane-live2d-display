@@ -46,7 +46,7 @@ export function createMotionSelector(
   }
 
   function selectPresetQueue(groupPrefix: string): SelectedMotion[] {
-    return selectEachGroup(getPresetGroups(groupPrefix));
+    return selectAllGroups(getPresetGroups(groupPrefix));
   }
 
   function selectGroups(groups: string[]): SelectedMotion | undefined {
@@ -73,6 +73,16 @@ export function createMotionSelector(
       const selected = selectGroup(group);
 
       return selected ? [selected] : [];
+    });
+  }
+
+  function selectAllGroups(groups: string[]): SelectedMotion[] {
+    return groups.flatMap((group) => {
+      const motions = getModelMotions(modelSettings, group);
+
+      return motions.flatMap((motion, index) =>
+        isSelectable(motion) ? [{ group, index, motion }] : [],
+      );
     });
   }
 
@@ -128,6 +138,7 @@ export function createMotionSelector(
     getGroupsByPattern,
     getMotion,
     getPresetGroups,
+    selectAllGroups,
     selectEachGroup,
     selectGroup,
     selectGroups,

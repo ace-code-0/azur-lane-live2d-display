@@ -11,9 +11,6 @@ import type { ModelDialogElement } from '../ui/modelDialog';
 import type { MotionItem, Settings } from './modelSettings';
 import type { TouchAction } from './touchActions';
 
-const IDLE_STATE_GROUP_PATTERN = /^Idle(?:$|\d)/;
-const IDLE_INTERLUDE_GROUP_PATTERN = /^Idle#/;
-
 type TouchMotionState =
   | {
       status: 'idle';
@@ -95,7 +92,6 @@ export function createMotionController(
   let nextMotionBuffer: NextMotionBuffer = { status: 'idle' };
   let leaveTimer: number | undefined;
   let idleRequestId = 0;
-  let nextIdlePhase: 'state' | 'interlude' = 'state';
   let nextRequestId = 1;
 
   if (!internalModel) {
@@ -269,26 +265,13 @@ export function createMotionController(
       return false;
     }
 
-    const started = await startMotionQueue(idleMotions, () => {
-      nextIdlePhase =
-        nextIdlePhase === 'state' && hasIdleInterludeMotion()
-          ? 'interlude'
-          : 'state';
-    });
+    const started = await startMotionQueue(idleMotions);
 
     return started;
   }
 
   function selectIdleMotions(): BufferedMotion[] {
-    if (nextIdlePhase === 'interlude') {
-      return motionSelector.selectEachGroup(
-        motionSelector.getGroupsByPattern(IDLE_INTERLUDE_GROUP_PATTERN),
-      ).map(toNormalQueuedMotion);
-    }
-
-    return motionSelector.selectEachGroup(
-      motionSelector.getGroupsByPattern(IDLE_STATE_GROUP_PATTERN),
-    ).map((motion) => ({
+    return motionSelector.selectPresetQueue('Idle').map((motion) => ({
       ...motion,
       priority: MotionPriority.IDLE,
     }));
@@ -400,14 +383,6 @@ export function createMotionController(
     nextMotionBuffer = { status: 'idle' };
     onComplete?.();
     requestIdleMotion();
-  }
-
-  function hasIdleInterludeMotion(): boolean {
-    return (
-      motionSelector.selectEachGroup(
-        motionSelector.getGroupsByPattern(IDLE_INTERLUDE_GROUP_PATTERN),
-      ).length > 0
-    );
   }
 
   function getPresetMotionGroups(groupPrefix: string): string[] {
