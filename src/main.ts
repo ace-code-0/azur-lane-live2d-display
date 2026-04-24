@@ -60,7 +60,7 @@ async function bootstrap(): Promise<void> {
     },
   );
 
-  Object.assign(window, { pixiApp: app, live2dModel: model });
+  Object.assign(window, { app: app, model: model });
 
   app.stage.on('pointerdown', () => {
     motionController.notifyUserActivity();

@@ -398,8 +398,24 @@ export function createMotionController(
 
     window.setTimeout(() => {
       modelSettingsBridge.applyMotionPostCommand(motion);
+      completeStartForegroundFromDetached();
       requestIdle('detached-motion-complete');
     }, duration);
+  }
+
+  function completeStartForegroundFromDetached(): void {
+    const sequence = foregroundSequence;
+
+    if (sequence?.presetPrefix !== START_MOTION_PREFIX) {
+      return;
+    }
+
+    const finishedPrefix = sequence.presetPrefix;
+    const finishedGroup = sequence.cycleGroup;
+
+    foregroundSequence = undefined;
+    advancePresetFamilyCursor(finishedPrefix, finishedGroup);
+    stopPrimaryMotions();
   }
 
   function applyMotionStartEffects(motion: MotionItem, playMotionSound: boolean): void {
@@ -847,6 +863,16 @@ export function createMotionController(
 
     manager.currentAudio.stop?.();
     manager.currentAudio.pause?.();
+  }
+
+  function stopPrimaryMotions(): void {
+    (
+      motionManager as
+        | {
+            stopAllMotions?: () => void;
+          }
+        | undefined
+    )?.stopAllMotions?.();
   }
 
   function clearStaleReserve(): void {
