@@ -79,6 +79,7 @@ export function createMotionController(
 
   let foregroundSequence: ForegroundSequence | undefined;
   let idleRequestToken = 0;
+  let idleTimer: number | undefined;
   let leaveTimer: number | undefined;
   const activeLayeredIdleGroups = new Set<string>();
   let currentEngineAudioOwner:
@@ -191,7 +192,11 @@ export function createMotionController(
   ): boolean {
     const currentPriority = foregroundSequence?.current?.priority ?? 0;
 
-    if (foregroundSequence && active.priority < currentPriority) {
+    if (
+      foregroundSequence &&
+      active.priority <= currentPriority &&
+      active.priority < PRIORITY.FORCE
+    ) {
       return false;
     }
 
@@ -336,10 +341,10 @@ export function createMotionController(
 
     clearStaleReserve();
 
-    if (shouldSkipForCurrentAudio(enginePriority)) {
+    if (shouldWaitForCurrentMotion(enginePriority)) {
       logMotionLifecycle('blocked', active.selectedMotion.reference, source, {
         enginePriority,
-        reason: 'idle-waits-current-audio',
+        reason: 'waits-current-motion',
         diagnostics: getMotionDiagnostics(active.selectedMotion.reference),
       });
       return 'blocked';
@@ -415,7 +420,6 @@ export function createMotionController(
 
     foregroundSequence = undefined;
     advancePresetFamilyCursor(finishedPrefix, finishedGroup);
-    stopPrimaryMotions();
   }
 
   function applyMotionStartEffects(motion: MotionItem, playMotionSound: boolean): void {
@@ -431,7 +435,13 @@ export function createMotionController(
   function requestIdle(reason: string): void {
     const token = ++idleRequestToken;
 
-    window.setTimeout(() => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+    }
+
+    idleTimer = window.setTimeout(() => {
+      idleTimer = undefined;
+
       if (token !== idleRequestToken || foregroundSequence) {
         return;
       }
@@ -444,7 +454,7 @@ export function createMotionController(
 
       void playMotion(selected.active, `idle:${reason}`, () => {}).then((status) => {
         if (status === 'blocked' && token === idleRequestToken && !foregroundSequence) {
-          window.setTimeout(() => requestIdle('engine-blocked'), 200);
+          requestIdle('engine-blocked');
         }
       });
     }, 50);
@@ -802,10 +812,18 @@ export function createMotionController(
     return !motion.File && Math.max(motion.MotionDuration ?? 0, 0) > 0;
   }
 
-  function shouldSkipForCurrentAudio(enginePriority: number): boolean {
-    const currentAudio = getCurrentAudio();
+  function shouldWaitForCurrentMotion(enginePriority: number): boolean {
+    if (enginePriority >= 3) {
+      return false;
+    }
 
-    return enginePriority === 1 && currentAudio?.isPlaying === true;
+    const state = motionManager?.state as
+      | {
+          currentPriority?: number;
+        }
+      | undefined;
+
+    return (state?.currentPriority ?? 0) >= enginePriority;
   }
 
   function getCurrentAudio():
@@ -863,16 +881,6 @@ export function createMotionController(
 
     manager.currentAudio.stop?.();
     manager.currentAudio.pause?.();
-  }
-
-  function stopPrimaryMotions(): void {
-    (
-      motionManager as
-        | {
-            stopAllMotions?: () => void;
-          }
-        | undefined
-    )?.stopAllMotions?.();
   }
 
   function clearStaleReserve(): void {
