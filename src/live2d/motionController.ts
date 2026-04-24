@@ -1066,7 +1066,7 @@ export function createMotionController(
     }
 
     // If the same motion is already being displayed, don't restart it (prevents flickering)
-    if (lastDialogMotion === motion && modelDialog.state.visible) {
+    if (lastDialogMotion === motion && modelDialog.isVisible) {
       return;
     }
 

@@ -135,6 +135,10 @@ export class ModelDialogElement extends LitElement {
   private closeTimer: number | undefined;
   private choiceHandler: ((choice: Choice) => void) | undefined;
 
+  get isVisible(): boolean {
+    return this.state.visible;
+  }
+
   constructor() {
     super();
     this.state = { visible: false };
