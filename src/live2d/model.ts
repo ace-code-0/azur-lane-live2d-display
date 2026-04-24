@@ -23,7 +23,6 @@ export async function loadModel(
       autoFocus: modelSettings.Controllers.MouseTracking.Enabled,
       autoHitTest: true,
       lipSyncGain: modelSettings.Controllers.LipSync.Gain,
-      idleMotionGroup: '__disabled_idle__',
       motionPreload: MotionPreloadStrategy.NONE,
     },
   );

@@ -4,6 +4,7 @@ export {
   MotionPriority,
 } from 'untitled-pixi-live2d-engine/cubism';
 
+import { encodeAssetName } from '../utils/assetEncoding';
 import type { Cubism4Model } from './model';
 import type { FileReferences, MotionItem, Settings } from './modelSettings';
 
@@ -154,7 +155,7 @@ function createEngineFileReferences(settings: Settings): FileReferences {
 }
 
 function encodeModelFilePath(path: string): string {
-  return path.split('/').map(encodeURIComponent).join('/');
+  return path.split('/').map(encodeAssetName).join('/');
 }
 
 export function createModelSettingsBridge(

@@ -183,13 +183,20 @@ function createSelectedMotion(
 
 function isPresetMotionGroup(group: string, prefix: string): boolean {
   if (prefix === 'Tick') {
-    return group === 'Tick' || /^Tick\d+$/.test(group) || /^tick_\d+$/.test(group);
+    return (
+      group === 'Tick' || /^Tick\d+$/.test(group) || /^tick_\d+$/.test(group)
+    );
   }
 
   if (prefix === 'Leave') {
     return /^Leave\d+_\d+_\d+$/.test(group) || /^leave_\d+_\d+_\d+$/.test(group);
   }
 
+  if (prefix === 'Tap') {
+    return group === 'Tap' || group.startsWith('Tap');
+  }
+
+  // Idle, Start, Shake 必须精确匹配
   return group === prefix;
 }
 

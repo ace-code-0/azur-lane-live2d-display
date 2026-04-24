@@ -22,7 +22,6 @@ const LEAVE_MOTION_PREFIX = 'Leave';
 const PRESET_MOTION_PREFIXES = [
   IDLE_MOTION_PREFIX,
   'Tap',
-  'TapArea',
   START_MOTION_PREFIX,
   'Shake',
   'Tick',
