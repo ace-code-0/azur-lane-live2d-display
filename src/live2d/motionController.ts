@@ -82,13 +82,6 @@ export function createMotionController(
   let idleTimer: number | undefined;
   let leaveTimer: number | undefined;
   const activeLayeredIdleGroups = new Set<string>();
-  let currentEngineAudioOwner:
-    | {
-        reference: string;
-        sound: string;
-        source: string;
-      }
-    | undefined;
   let nextRequestId = 1;
 
   const modelSettingsBridge = createModelSettingsBridge(model, modelSettings, {
@@ -106,7 +99,7 @@ export function createMotionController(
       const owner =
         source?.owner !== undefined
           ? `${source.phase}:${source.owner}`
-          : source?.phase ?? 'unknown';
+          : (source?.phase ?? 'unknown');
 
       console.log(`${getTimestamp()} Command[${owner}]: ${command}`);
     },
@@ -152,7 +145,10 @@ export function createMotionController(
         : action.motionIndex === undefined
           ? motionSelector.selectGroup(action.group)
           : {
-              motion: motionSelector.getMotion(action.group, action.motionIndex),
+              motion: motionSelector.getMotion(
+                action.group,
+                action.motionIndex,
+              ),
               reference: createMotionReference(
                 action.group,
                 motionSelector.getMotion(action.group, action.motionIndex).Name,
@@ -267,7 +263,10 @@ export function createMotionController(
       completeForegroundCurrent();
     });
 
-    if (status === 'blocked' && foregroundSequence?.requestId === sequence.requestId) {
+    if (
+      status === 'blocked' &&
+      foregroundSequence?.requestId === sequence.requestId
+    ) {
       window.setTimeout(() => {
         if (foregroundSequence?.requestId === sequence.requestId) {
           void playForegroundCurrent(source);
@@ -276,7 +275,10 @@ export function createMotionController(
       return;
     }
 
-    if (status === 'rejected' && foregroundSequence?.requestId === sequence.requestId) {
+    if (
+      status === 'rejected' &&
+      foregroundSequence?.requestId === sequence.requestId
+    ) {
       foregroundSequence = undefined;
       requestIdle('foreground-rejected');
     }
@@ -291,7 +293,10 @@ export function createMotionController(
     }
 
     modelSettingsBridge.applyMotionPostCommand(current.selectedMotion.motion);
-    advancePresetCycleCursor(sequence.cycleGroup, current.selectedMotion.reference);
+    advancePresetCycleCursor(
+      sequence.cycleGroup,
+      current.selectedMotion.reference,
+    );
 
     const next = sequence.pending.shift();
 
@@ -314,10 +319,13 @@ export function createMotionController(
     onComplete: () => void,
   ): Promise<MotionPlayStatus> {
     const motion = active.selectedMotion.motion;
-    logMotionStart(active.selectedMotion.reference, active.priority, source);
 
     if (!motion.File) {
-      applyMotionStartEffects(motion, true);
+      logMotionLifecycle('started', active.selectedMotion.reference, source, {
+        requestPriority: active.priority,
+        vars: motionVariables.entries(),
+      });
+      applyMotionStartEffects(motion);
       const duration = Math.max(motion.MotionDuration ?? 0, 0);
 
       if (duration > 0) {
@@ -337,52 +345,55 @@ export function createMotionController(
     );
 
     const enginePriority =
-      active.priority >= PRIORITY.FORCE ? 3 : active.priority >= PRIORITY.NORMAL ? 2 : 1;
+      active.priority >= PRIORITY.FORCE
+        ? 3
+        : active.priority >= PRIORITY.NORMAL
+          ? 2
+          : 1;
 
     clearStaleReserve();
 
     if (shouldWaitForCurrentMotion(enginePriority)) {
       logMotionLifecycle('blocked', active.selectedMotion.reference, source, {
-        enginePriority,
+        requestPriority: active.priority,
+        live2dPriority: getEnginePriorityName(enginePriority),
         reason: 'waits-current-motion',
         diagnostics: getMotionDiagnostics(active.selectedMotion.reference),
       });
       return 'blocked';
     }
 
-    if (enginePriority >= 2) {
-      stopCurrentAudio();
-    }
-
-    const started = await model.motion(locator.group, locator.index, enginePriority as never, {
-      onError: (error) => {
-        logMotionLifecycle('error', active.selectedMotion.reference, source, {
-          enginePriority,
-          error,
-        });
+    const started = await model.motion(
+      locator.group,
+      locator.index,
+      enginePriority as never,
+      {
+        onError: (error) => {
+          logMotionLifecycle('error', active.selectedMotion.reference, source, {
+            requestPriority: active.priority,
+            live2dPriority: getEnginePriorityName(enginePriority),
+            error,
+          });
+        },
       },
-    });
+    );
 
     if (!started) {
       clearStaleReserve();
       logMotionLifecycle('rejected', active.selectedMotion.reference, source, {
-        enginePriority,
+        requestPriority: active.priority,
+        live2dPriority: getEnginePriorityName(enginePriority),
         diagnostics: getMotionDiagnostics(active.selectedMotion.reference),
       });
       return 'rejected';
     }
 
     logMotionLifecycle('started', active.selectedMotion.reference, source, {
-      enginePriority,
+      requestPriority: active.priority,
+      live2dPriority: getEnginePriorityName(enginePriority),
+      vars: motionVariables.entries(),
     });
-    if (motion.Sound) {
-      currentEngineAudioOwner = {
-        reference: active.selectedMotion.reference,
-        sound: motion.Sound,
-        source,
-      };
-    }
-    applyMotionStartEffects(motion, false);
+    applyMotionStartEffects(motion);
 
     if (source === `preset:${START_MOTION_PREFIX}`) {
       void startLayeredIdleMotions();
@@ -396,8 +407,12 @@ export function createMotionController(
     source: string,
   ): Promise<void> {
     const motion = active.selectedMotion.motion;
-    logMotionStart(active.selectedMotion.reference, active.priority, source);
-    applyMotionStartEffects(motion, true);
+    logMotionLifecycle('started', active.selectedMotion.reference, source, {
+      requestPriority: active.priority,
+      detached: true,
+      vars: motionVariables.entries(),
+    });
+    applyMotionStartEffects(motion);
 
     const duration = Math.max(motion.MotionDuration ?? 0, 0);
 
@@ -420,16 +435,14 @@ export function createMotionController(
 
     foregroundSequence = undefined;
     advancePresetFamilyCursor(finishedPrefix, finishedGroup);
+    releaseCurrentMotionPriority();
   }
 
-  function applyMotionStartEffects(motion: MotionItem, playMotionSound: boolean): void {
+  function applyMotionStartEffects(motion: MotionItem): void {
     modelSettingsBridge.applyMotionCommand(motion);
     motionVariables.applyAssignments(motion);
     showMotionDialog(motion);
-
-    if (playMotionSound) {
-      playSound(motion.Sound);
-    }
+    playSound(motion.Sound);
   }
 
   function requestIdle(reason: string): void {
@@ -452,11 +465,17 @@ export function createMotionController(
         return;
       }
 
-      void playMotion(selected.active, `idle:${reason}`, () => {}).then((status) => {
-        if (status === 'blocked' && token === idleRequestToken && !foregroundSequence) {
-          requestIdle('engine-blocked');
-        }
-      });
+      void playMotion(selected.active, `idle:${reason}`, () => {}).then(
+        (status) => {
+          if (
+            status === 'blocked' &&
+            token === idleRequestToken &&
+            !foregroundSequence
+          ) {
+            window.setTimeout(() => requestIdle('engine-blocked'), 200);
+          }
+        },
+      );
     }, 50);
   }
 
@@ -577,22 +596,33 @@ export function createMotionController(
       selected.motion,
     );
 
-    logMotionStart(selected.reference, priority, source);
-
     const started = await manager.startMotion(
       locator.group,
       locator.index,
       priority >= PRIORITY.FORCE ? 3 : priority >= PRIORITY.NORMAL ? 2 : 1,
     );
 
-    logMotionLifecycle(started ? 'started' : 'rejected', selected.reference, source, {
-      layer,
-    });
+    logMotionLifecycle(
+      started ? 'started' : 'rejected',
+      selected.reference,
+      source,
+      {
+        requestPriority: priority,
+        live2dPriority: getEnginePriorityName(
+          priority >= PRIORITY.FORCE ? 3 : priority >= PRIORITY.NORMAL ? 2 : 1,
+        ),
+        layer,
+        vars: motionVariables.entries(),
+      },
+    );
 
     return started;
   }
 
-  function advancePresetCycleCursor(group: string | undefined, ref: string): void {
+  function advancePresetCycleCursor(
+    group: string | undefined,
+    ref: string,
+  ): void {
     if (!group) {
       return;
     }
@@ -647,7 +677,9 @@ export function createMotionController(
   }
 
   function createPresetFamilyCursorByPrefix(): Record<string, number> {
-    return Object.fromEntries(PRESET_MOTION_PREFIXES.map((prefix) => [prefix, 0]));
+    return Object.fromEntries(
+      PRESET_MOTION_PREFIXES.map((prefix) => [prefix, 0]),
+    );
   }
 
   function createPresetCycleCursorByGroup(): Record<string, number> {
@@ -660,7 +692,9 @@ export function createMotionController(
 
   function getLayeredIdleGroups(): string[] {
     return Object.keys(modelSettings.FileReferences.Motions).filter(
-      (group) => group.startsWith(`${IDLE_MOTION_PREFIX}#`) && getMotionLayer(group) !== undefined,
+      (group) =>
+        group.startsWith(`${IDLE_MOTION_PREFIX}#`) &&
+        getMotionLayer(group) !== undefined,
     );
   }
 
@@ -699,9 +733,12 @@ export function createMotionController(
     const match = group.match(/Leave(\d+)_(\d+)_(\d+)/);
 
     if (match) {
-      leaveTimer = window.setTimeout(() => {
-        startPresetMotionCycle(LEAVE_MOTION_PREFIX);
-      }, Number(match[1]) * 1000);
+      leaveTimer = window.setTimeout(
+        () => {
+          startPresetMotionCycle(LEAVE_MOTION_PREFIX);
+        },
+        Number(match[1]) * 1000,
+      );
     }
   }
 
@@ -716,17 +753,8 @@ export function createMotionController(
     }
 
     modelDialog.hide();
-    modelDialog.showMotion(motion, (choice) => startReferencedMotion(choice.NextMtn));
-  }
-
-  function logMotionStart(ref: string, priority: number, source: string): void {
-    if (!debugTouch) {
-      return;
-    }
-
-    console.log(
-      `${getTimestamp()} Motion: ${ref} | Priority: ${priority} | Source: ${source} | Vars:`,
-      motionVariables.entries(),
+    modelDialog.showMotion(motion, (choice) =>
+      startReferencedMotion(choice.NextMtn),
     );
   }
 
@@ -777,7 +805,6 @@ export function createMotionController(
 
     return {
       playing: motionManager?.playing,
-      currentAudio: getCurrentAudioDiagnostics(),
       foregroundCurrent: current?.selectedMotion.reference,
       foregroundQueue:
         foregroundSequence?.pending.map(
@@ -804,8 +831,34 @@ export function createMotionController(
 
   function playSound(path?: string): void {
     if (path) {
-      new Audio(path).play().catch(() => {});
+      new Audio(resolveModelAssetUrl(path)).play().catch(() => {});
     }
+  }
+
+  function getEnginePriorityName(priority: number): string {
+    if (priority >= 3) {
+      return 'FORCE';
+    }
+
+    if (priority >= 2) {
+      return 'NORMAL';
+    }
+
+    if (priority >= 1) {
+      return 'IDLE';
+    }
+
+    return 'NONE';
+  }
+
+  function resolveModelAssetUrl(path: string): string {
+    const settings = motionManager?.settings as
+      | {
+          resolveURL?: (path: string) => string;
+        }
+      | undefined;
+
+    return settings?.resolveURL?.(path) ?? path;
   }
 
   function shouldDetachMotion(motion: MotionItem): boolean {
@@ -826,61 +879,14 @@ export function createMotionController(
     return (state?.currentPriority ?? 0) >= enginePriority;
   }
 
-  function getCurrentAudio():
-    | {
-        isPlaying?: boolean;
-        url?: string;
-      }
-    | undefined {
-    return (
-      motionManager as
-        | {
-            currentAudio?: {
-              isPlaying?: boolean;
-              url?: string;
-            };
-          }
-        | undefined
-    )?.currentAudio;
-  }
-
-  function getCurrentAudioDiagnostics(): Record<string, unknown> | undefined {
-    const currentAudio = getCurrentAudio();
-
-    if (!currentAudio) {
-      return undefined;
-    }
-
-    return {
-      isPlaying: currentAudio.isPlaying,
-      url: currentAudio.url,
-      owner: currentEngineAudioOwner,
-    };
-  }
-
-  function stopCurrentAudio(): void {
-    const manager = motionManager as
+  function releaseCurrentMotionPriority(): void {
+    const state = motionManager?.state as
       | {
-          stopSpeaking?: () => void;
-          currentAudio?: {
-            isPlaying?: boolean;
-            stop?: () => void;
-            pause?: () => void;
-          };
+          complete?: () => void;
         }
       | undefined;
 
-    if (!manager?.currentAudio?.isPlaying) {
-      return;
-    }
-
-    if (manager.stopSpeaking) {
-      manager.stopSpeaking();
-      return;
-    }
-
-    manager.currentAudio.stop?.();
-    manager.currentAudio.pause?.();
+    state?.complete?.();
   }
 
   function clearStaleReserve(): void {

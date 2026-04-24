@@ -161,10 +161,7 @@ function createEngineFileReferences(settings: Settings): FileReferences {
             motion.File === undefined
               ? undefined
               : encodeModelFilePath(motion.File),
-          Sound:
-            motion.Sound === undefined
-              ? undefined
-              : encodeModelFilePath(motion.Sound),
+          Sound: undefined,
         })),
       ]),
     ),
