@@ -257,12 +257,16 @@ export function createModelSettingsBridge(
           settings.Controllers.MouseTracking.Enabled,
       );
 
-      for (const [id, value] of Object.entries(persistedCommandState.parameterValues)) {
+      for (const [id, value] of Object.entries(
+        persistedCommandState.parameterValues,
+      )) {
         parameterValues.set(id, value);
         setModelParameter(model, id, value);
       }
 
-      for (const [id, value] of Object.entries(persistedCommandState.parameterLocks)) {
+      for (const [id, value] of Object.entries(
+        persistedCommandState.parameterLocks,
+      )) {
         parameterLocks.set(id, value);
         setModelParameter(model, id, value);
       }
@@ -397,11 +401,7 @@ export function setModelParameter(
   throw new Error(`Live2D core model cannot set parameter: ${id}`);
 }
 
-function setPartOpacity(
-  model: Cubism4Model,
-  id: string,
-  value: number,
-): void {
+function setPartOpacity(model: Cubism4Model, id: string, value: number): void {
   const { coreModel } = getInternalModel(model);
 
   if (coreModel?.setPartOpacityById) {

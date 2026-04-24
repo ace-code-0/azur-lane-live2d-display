@@ -23,7 +23,7 @@ export async function loadModel(
       autoFocus: modelSettings.Controllers.MouseTracking.Enabled,
       autoHitTest: true,
       lipSyncGain: modelSettings.Controllers.LipSync.Gain,
-      idleMotionGroup: '', // 禁用引擎内建的自动空闲动作，由 MotionController 统一调度
+      idleMotionGroup: '__DISABLED__', // 使用非空字符串避开 options.idleMotionGroup || 'Idle' 的回退逻辑
       motionPreload: MotionPreloadStrategy.NONE,
     },
   );
