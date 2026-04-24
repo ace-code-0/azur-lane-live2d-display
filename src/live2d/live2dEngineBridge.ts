@@ -29,12 +29,23 @@ export type EngineModelSettings = Settings & {
 };
 
 type BridgeCallbacks = {
-  startReferencedMotion(reference: string): void;
+  startReferencedMotion(
+    reference: string,
+    source?: {
+      phase: 'command' | 'post-command';
+      owner?: string;
+    },
+  ): void;
   onCommand?: (
     namespace: string,
     action: string,
     target?: string,
     value?: string,
+    source?: {
+      phase: 'command' | 'post-command';
+      owner?: string;
+      statement: string;
+    },
   ) => void;
 };
 
@@ -180,11 +191,20 @@ export function createModelSettingsBridge(
     }
   });
 
-  function applyCommand(command: string | undefined): void {
+  function applyCommand(
+    command: string | undefined,
+    source: {
+      phase: 'command' | 'post-command';
+      owner?: string;
+    },
+  ): void {
     for (const statement of splitCommand(command)) {
       const [namespace, action, target, rawValue] = statement.split(/\s+/, 4);
 
-      callbacks.onCommand?.(namespace, action, target, rawValue);
+      callbacks.onCommand?.(namespace, action, target, rawValue, {
+        ...source,
+        statement,
+      });
 
       if (namespace === 'mouse_tracking') {
         const enabled = action === 'enable';
@@ -200,7 +220,7 @@ export function createModelSettingsBridge(
       }
 
       if (namespace === 'start_mtn') {
-        callbacks.startReferencedMotion(action);
+        callbacks.startReferencedMotion(action, source);
         continue;
       }
 
@@ -275,11 +295,17 @@ export function createModelSettingsBridge(
     },
 
     applyMotionCommand(motion: MotionItem): void {
-      applyCommand(motion.Command);
+      applyCommand(motion.Command, {
+        phase: 'command',
+        owner: motion.Name,
+      });
     },
 
     applyMotionPostCommand(motion: MotionItem): void {
-      applyCommand(motion.PostCommand);
+      applyCommand(motion.PostCommand, {
+        phase: 'post-command',
+        owner: motion.Name,
+      });
     },
 
     async prepareMotionPlayback(
