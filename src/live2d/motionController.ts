@@ -391,7 +391,7 @@ export function createMotionController(
     const started = await startScheduledMotion();
 
     if (!started && debugTouch && requestId === idleRequestId) {
-      // Idle 未启动通常是因为变量不匹配，L2DEX 一般不打印此类日志，除非进入调试模式
+      // 这里的静默是正确的，L2DEX 不会在此处报错
     }
   }
 
@@ -544,12 +544,10 @@ export function createMotionController(
       return false;
     }
 
-    const started = await playScheduledMotionItem(
+    return playScheduledMotionItem(
       motionScheduler.currentMotionSlot,
       motionScheduler.requestId,
     );
-
-    return started;
   }
 
   let currentAudio: HTMLAudioElement | undefined;
@@ -577,33 +575,44 @@ export function createMotionController(
   ): Promise<boolean> {
     const motion = active.selectedMotion.motion;
 
-    // 输出 L2DEX 格式动作日志
-    console.log(`${getTimestamp()} Motion: ${active.selectedMotion.reference} | Priority: ${active.priority}`);
-
-    modelSettingsBridge.applyMotionCommand(motion);
-    motionVariables.applyAssignments(motion);
-    showMotionDialog(motion);
-    playSound(motion.Sound);
-
     motionScheduler.currentMotionSlot = active;
     motionScheduler.requestId = requestId;
 
+    // 1. 无文件动作（仅命令）
     if (!motion.File) {
+      console.log(`${getTimestamp()} Motion: ${active.selectedMotion.reference} | Priority: ${active.priority}`);
+      modelSettingsBridge.applyMotionCommand(motion);
+      motionVariables.applyAssignments(motion);
+      showMotionDialog(motion);
+      playSound(motion.Sound);
       advanceMotionScheduler(requestId);
       return true;
     }
 
-    const started = await startEngineMotion(active)
-      .catch((error: unknown) => {
-        console.error(`${getTimestamp()} Scheduled motion failed`, {
-          reference: active.selectedMotion.reference,
-          error,
+    // 2. 有文件动作：先请求引擎，成功后再输出日志
+    const started = await startEngineMotion(active).catch((error) => {
+      console.error(`${getTimestamp()} Engine error during motion start:`, error);
+      return false;
+    });
+
+    if (started) {
+      console.log(`${getTimestamp()} Motion: ${active.selectedMotion.reference} | Priority: ${active.priority}`);
+      modelSettingsBridge.applyMotionCommand(motion);
+      motionVariables.applyAssignments(motion);
+      showMotionDialog(motion);
+      playSound(motion.Sound);
+    } else if (motionScheduler.requestId === requestId) {
+      // 诊断信息：为什么被拒绝？
+      if (debugTouch) {
+        const manager = (model as any).internalModel.motionManager;
+        console.warn(`${getTimestamp()} Motion Rejected Diagnostic:`, {
+          requestedPriority: active.priority,
+          currentEnginePriority: manager?.currentPriority,
+          managerState: manager?.state,
+          isReserved: manager?.isReserved,
+          reference: active.selectedMotion.reference
         });
-
-        return false;
-      });
-
-    if (!started && motionScheduler.requestId === requestId) {
+      }
       handleScheduledMotionRejected(requestId);
     }
 
@@ -694,6 +703,16 @@ export function createMotionController(
       return;
     }
 
+    // 如果被拒且是 Idle，不要立即重试，以免形成死循环。
+    // 这通常意味着有更高优先级的动作正在播放，或者引擎状态繁忙。
+    if (motionScheduler.presetPrefix === IDLE_MOTION_PREFIX) {
+      if (debugTouch) {
+        console.warn(`${getTimestamp()} Idle motion ${motionScheduler.currentMotionSlot?.selectedMotion.reference} was rejected by engine.`);
+      }
+      motionScheduler.currentMotionSlot = undefined;
+      return; 
+    }
+
     if (motionScheduler.nextMotionSlot) {
       const next = motionScheduler.nextMotionSlot;
       motionScheduler.currentMotionSlot = next;
@@ -709,21 +728,6 @@ export function createMotionController(
       motionScheduler.presetPrefix,
       motionScheduler.cycleGroup,
     );
-
-    if (motionScheduler.presetPrefix === IDLE_MOTION_PREFIX) {
-      resetIdleMotionScheduler();
-      if (
-        motionScheduler.currentMotionSlot !== undefined &&
-        motionScheduler.requestId !== undefined
-      ) {
-        const next = motionScheduler.currentMotionSlot;
-        const nextId = motionScheduler.requestId;
-        window.requestAnimationFrame(() => {
-          void playScheduledMotionItem(next, nextId);
-        });
-      }
-      return;
-    }
 
     motionScheduler = {};
     resetIdleMotionScheduler();
@@ -814,12 +818,6 @@ export function createMotionController(
   function playReferencedMotion(selectedMotion: SelectedMotion, priority: number): void {
     const motion = selectedMotion.motion;
 
-    console.log(`${getTimestamp()} Motion: ${selectedMotion.reference} | Priority: ${priority}`);
-
-    modelSettingsBridge.applyMotionCommand(motion);
-    motionVariables.applyAssignments(motion);
-    showMotionDialog(motion);
-
     if (motion.File) {
       const locator = resolveEngineMotionLocator(selectedMotion.reference);
 
@@ -830,6 +828,10 @@ export function createMotionController(
         )
         .then((started) => {
           if (started) {
+            console.log(`${getTimestamp()} Motion: ${selectedMotion.reference} | Priority: ${priority}`);
+            modelSettingsBridge.applyMotionCommand(motion);
+            motionVariables.applyAssignments(motion);
+            showMotionDialog(motion);
             schedulePostCommand(motion);
             return;
           }
@@ -845,6 +847,10 @@ export function createMotionController(
       return;
     }
 
+    console.log(`${getTimestamp()} Motion: ${selectedMotion.reference} | Priority: ${priority}`);
+    modelSettingsBridge.applyMotionCommand(motion);
+    motionVariables.applyAssignments(motion);
+    showMotionDialog(motion);
     schedulePostCommand(motion);
   }
 
@@ -908,12 +914,10 @@ export function createMotionController(
       motion,
     };
 
-    console.log(`${getTimestamp()} Motion: ${selected.reference} | Priority: ${L2DEX_PRIORITY.NORMAL}`);
-
-    modelSettingsBridge.applyMotionCommand(motion);
-    showMotionDialog(motion);
-
     if (!motion.File) {
+      console.log(`${getTimestamp()} Motion: ${selected.reference} | Priority: ${L2DEX_PRIORITY.NORMAL}`);
+      modelSettingsBridge.applyMotionCommand(motion);
+      showMotionDialog(motion);
       motionVariables.applyAssignments(motion);
       scheduleTouchMotionFinish(requestId, action, motion);
       return;
@@ -950,12 +954,15 @@ export function createMotionController(
           return;
         }
 
+        console.log(`${getTimestamp()} Motion: ${selected.reference} | Priority: ${L2DEX_PRIORITY.NORMAL}`);
         touchMotionState = {
           status: 'playing',
           requestId,
           action,
           motion,
         };
+        modelSettingsBridge.applyMotionCommand(motion);
+        showMotionDialog(motion);
         motionVariables.applyAssignments(motion);
         scheduleTouchMotionFinish(requestId, action, motion);
       })
