@@ -27,7 +27,7 @@ const PRESET_MOTION_PREFIXES = [
   LEAVE_MOTION_PREFIX,
 ] as const;
 
-const L2DEX_PRIORITY = {
+const PRIORITY = {
   IDLE: 1,
   NORMAL: 2,
   FORCE: 9,
@@ -37,6 +37,8 @@ type ActiveMotion = {
   selectedMotion: SelectedMotion;
   priority: number;
 };
+
+type MotionPlayStatus = 'started' | 'blocked' | 'rejected';
 
 type ForegroundSequence = {
   requestId: number;
@@ -62,7 +64,7 @@ export function createMotionController(
   modelDialog: ModelDialogElement,
   debugTouch: boolean,
 ): MotionController {
-  const internalModel = model.internalModel;
+  const motionManager = model.internalModel?.motionManager;
   const motionVariables = new MotionVariableStore(modelSettings);
   const motionSelector = createMotionSelector(modelSettings, motionVariables);
   const presetGroupsByPrefix = createPresetGroupsByPrefix();
@@ -71,305 +73,68 @@ export function createMotionController(
   const presetCycleCursorByGroup = createPresetCycleCursorByGroup();
 
   let foregroundSequence: ForegroundSequence | undefined;
-  let leaveTimer: number | undefined;
   let idleRequestToken = 0;
-  let idleRetryCount = 0;
-  let idleRetryTimer: number | undefined;
-  let idleBlockedByEngine = false;
+  let leaveTimer: number | undefined;
+  let currentEngineAudioOwner:
+    | {
+        reference: string;
+        sound: string;
+        source: string;
+      }
+    | undefined;
   let nextRequestId = 1;
 
-  if (!internalModel) {
-    throw new Error('Live2D internal model is not ready');
-  }
-
-  const motionManager = internalModel.motionManager;
   const modelSettingsBridge = createModelSettingsBridge(model, modelSettings, {
     startReferencedMotion(reference, source) {
       enqueueReferencedMotion(reference, source);
     },
     onCommand(namespace, action, target, value, source) {
-      const cmd = target
+      if (!debugTouch) {
+        return;
+      }
+
+      const command = target
         ? `${namespace} ${action} ${target} ${value ?? ''}`.trim()
         : `${namespace} ${action}`;
-      const sourceLabel =
+      const owner =
         source?.owner !== undefined
           ? `${source.phase}:${source.owner}`
           : source?.phase ?? 'unknown';
 
-      console.log(`${getTimestamp()} Command[${sourceLabel}]: ${cmd}`);
-      logScheduler('command', {
-        namespace,
-        action,
-        target,
-        value,
-        owner: source?.owner,
-      });
-
-      reconcileIdle('command');
+      console.log(`${getTimestamp()} Command[${owner}]: ${command}`);
     },
   });
   modelSettingsBridge.applyInitialSettings();
 
   motionManager?.on('motionFinish', () => {
-    idleBlockedByEngine = false;
-    const current = foregroundSequence?.current;
-
-    if (current) {
-      completeForegroundMotion('engine-finish');
+    if (foregroundSequence?.current?.selectedMotion.motion.File) {
+      completeForegroundCurrent();
       return;
     }
 
-    logScheduler('motion-finish-without-foreground', {
-      playing: motionManager?.playing,
-    });
-    reconcileIdle('engine-finish-no-foreground');
+    if (!foregroundSequence) {
+      requestIdle('engine-finish');
+    }
   });
 
-  reconcileIdle('bootstrap');
-
-  async function playMotion(
-    active: ActiveMotion,
-    source: string,
-    isForeground: boolean,
-  ): Promise<boolean> {
-    const motion = active.selectedMotion.motion;
-    logMotionStart(active.selectedMotion.reference, active.priority, source);
-
-    if (!motion.File) {
-      applyMotionStartEffects(motion);
-
-      const duration = Math.max(motion.MotionDuration ?? 0, 0);
-
-      if (duration > 0) {
-        scheduleDetachedPostCommand(active, source, duration);
-      } else {
-        modelSettingsBridge.applyMotionPostCommand(motion);
-      }
-
-      if (isForeground) {
-        completeForegroundMotion(
-          duration > 0 ? 'detached-duration-scheduled' : 'instant-slot',
-          duration <= 0,
-        );
-      }
+  function startPresetMotionCycle(groupPrefix: string): boolean {
+    if (groupPrefix === IDLE_MOTION_PREFIX) {
+      requestIdle('preset');
       return true;
     }
 
-    const locator = resolveEngineMotionLocator(active.selectedMotion.reference);
-    await modelSettingsBridge.prepareMotionPlayback(
-      locator.group,
-      locator.index,
-      motion,
-    );
+    const priority =
+      groupPrefix === START_MOTION_PREFIX ? PRIORITY.FORCE : PRIORITY.NORMAL;
+    const selected = selectPresetMotion(groupPrefix, priority);
 
-    const enginePriority =
-      active.priority >= L2DEX_PRIORITY.FORCE ? 3 : active.priority >= L2DEX_PRIORITY.NORMAL ? 2 : 1;
-    const started = await model.motion(locator.group, locator.index, enginePriority as never, {
-      onFinish: () => {
-        if (isForeground) {
-          if (
-            foregroundSequence?.current?.selectedMotion.reference ===
-            active.selectedMotion.reference
-          ) {
-            completeForegroundMotion('motion-onFinish');
-          }
-          return;
-        }
-
-        idleBlockedByEngine = false;
-        logScheduler('idle-finished', {
-          reference: active.selectedMotion.reference,
-          source,
-        });
-        reconcileIdle('idle-finish');
-      },
-    });
-
-    if (!started) {
-      logScheduler('motion-start-rejected', {
-        reference: active.selectedMotion.reference,
-        source,
-        isForeground,
-        enginePriority,
-        playing: motionManager?.playing,
-      });
-
-      if (!isForeground && motionManager?.playing) {
-        idleBlockedByEngine = true;
-      }
+    if (!selected.active) {
       return false;
     }
 
-    applyMotionStartEffects(motion);
-    return true;
-  }
-
-  function applyMotionStartEffects(motion: MotionItem): void {
-    modelSettingsBridge.applyMotionCommand(motion);
-    motionVariables.applyAssignments(motion);
-    showMotionDialog(motion);
-    playSound(motion.Sound);
-  }
-
-  function scheduleDetachedPostCommand(
-    active: ActiveMotion,
-    source: string,
-    duration: number,
-  ): void {
-    const { motion } = active.selectedMotion;
-
-    window.setTimeout(() => {
-      modelSettingsBridge.applyMotionPostCommand(motion);
-      logScheduler('detached-post-command-fired', {
-        reference: active.selectedMotion.reference,
-        duration,
-        source,
-      });
-      reconcileIdle('detached-post-command');
-    }, duration);
-
-    logScheduler('detached-post-command-scheduled', {
-      reference: active.selectedMotion.reference,
-      duration,
-      source,
-    });
-  }
-
-  function completeForegroundMotion(
-    trigger: string,
-    skipPostCommand = false,
-  ): void {
-    const sequence = foregroundSequence;
-    const current = sequence?.current;
-
-    if (!sequence || !current) {
-      logScheduler('complete-skipped', { trigger });
-      return;
-    }
-
-    logScheduler('foreground-complete', {
-      trigger,
-      requestId: sequence.requestId,
-      reference: current.selectedMotion.reference,
-      skipPostCommand,
-    });
-
-    if (!skipPostCommand) {
-      modelSettingsBridge.applyMotionPostCommand(current.selectedMotion.motion);
-    }
-
-    advancePresetCycleCursor(sequence.cycleGroup, current.selectedMotion.reference);
-
-    const next = sequence.pending.shift();
-
-    if (next) {
-      sequence.current = next;
-      void playMotion(next, `queued-after:${trigger}`, true).then((started) => {
-        if (!started && foregroundSequence?.requestId === sequence.requestId) {
-          completeForegroundMotion('engine-rejected');
-        }
-      });
-      return;
-    }
-
-    const finishedPrefix = sequence.presetPrefix;
-    const finishedGroup = sequence.cycleGroup;
-    foregroundSequence = undefined;
-    advancePresetFamilyCursor(finishedPrefix, finishedGroup);
-    reconcileIdle(`after:${trigger}`);
-  }
-
-  function startForegroundSequence(
-    active: ActiveMotion,
-    options: {
-      source: string;
-      presetPrefix?: string;
-      cycleGroup?: string;
-    },
-  ): boolean {
-    const currentPriority = foregroundSequence?.current?.priority ?? 0;
-
-    if (foregroundSequence && active.priority < currentPriority) {
-      logScheduler('sequence-rejected', {
-        source: options.source,
-        requested: active.selectedMotion.reference,
-        active: foregroundSequence.current?.selectedMotion.reference,
-      });
-      return false;
-    }
-
-    cancelIdleRetry('foreground-start');
-
-    const sequence: ForegroundSequence = {
-      requestId: nextRequestId++,
-      source: options.source,
-      presetPrefix: options.presetPrefix,
-      cycleGroup: options.cycleGroup,
-      current: active,
-      pending: [],
-    };
-    foregroundSequence = sequence;
-
-    logScheduler('sequence-start', {
-      requestId: sequence.requestId,
-      source: options.source,
-      reference: active.selectedMotion.reference,
-      priority: active.priority,
-      presetPrefix: options.presetPrefix,
-      cycleGroup: options.cycleGroup,
-    });
-
-    void playMotion(active, options.source, true).then((started) => {
-      if (!started && foregroundSequence?.requestId === sequence.requestId) {
-        foregroundSequence = undefined;
-        reconcileIdle('foreground-rejected');
-      }
-    });
-
-    return true;
-  }
-
-  function enqueueReferencedMotion(
-    reference: string,
-    source?: {
-      phase: 'command' | 'post-command';
-      owner?: string;
-    },
-  ): void {
-    const selected = motionSelector.selectReference(reference);
-
-    if (!selected) {
-      logScheduler('enqueue-missing', {
-        reference,
-        owner: source?.owner,
-        phase: source?.phase,
-      });
-      return;
-    }
-
-    const active: ActiveMotion = {
-      selectedMotion: selected,
-      priority: foregroundSequence?.current?.priority ?? L2DEX_PRIORITY.FORCE,
-    };
-    const sourceLabel =
-      source?.owner !== undefined
-        ? `${source.phase}:${source.owner}`
-        : source?.phase ?? 'direct';
-
-    if (foregroundSequence) {
-      foregroundSequence.pending.unshift(active);
-      logScheduler('queued-derived-motion', {
-        from: sourceLabel,
-        reference,
-        queue: foregroundSequence.pending.map(
-          ({ selectedMotion }) => selectedMotion.reference,
-        ),
-      });
-      return;
-    }
-
-    startForegroundSequence(active, {
-      source: `derived:${sourceLabel}`,
+    return startForegroundSequence(selected.active, {
+      source: `preset:${groupPrefix}`,
+      presetPrefix: groupPrefix,
+      cycleGroup: selected.cycleGroup,
     });
   }
 
@@ -388,15 +153,12 @@ export function createMotionController(
             };
 
     if (!selected || !motionVariables.matches(selected.motion)) {
-      logScheduler('touch-no-match', { reference: action.reference });
       return;
     }
 
     startForegroundSequence(
-      { selectedMotion: selected, priority: L2DEX_PRIORITY.NORMAL },
-      {
-        source: `touch:${selected.reference}`,
-      },
+      { selectedMotion: selected, priority: PRIORITY.NORMAL },
+      { source: `touch:${selected.reference}` },
     );
   }
 
@@ -404,148 +166,264 @@ export function createMotionController(
     const selected = motionSelector.selectReference(reference);
 
     if (!selected) {
-      logScheduler('reference-missing', { reference });
       return;
     }
 
     startForegroundSequence(
-      { selectedMotion: selected, priority: L2DEX_PRIORITY.FORCE },
-      {
-        source: `reference:${reference}`,
-      },
+      { selectedMotion: selected, priority: PRIORITY.FORCE },
+      { source: `reference:${reference}` },
     );
   }
 
-  function startPresetMotionCycle(groupPrefix: string): boolean {
-    if (groupPrefix === IDLE_MOTION_PREFIX) {
-      reconcileIdle('public-idle-request');
-      return true;
-    }
+  function startForegroundSequence(
+    active: ActiveMotion,
+    options: {
+      source: string;
+      presetPrefix?: string;
+      cycleGroup?: string;
+    },
+  ): boolean {
+    const currentPriority = foregroundSequence?.current?.priority ?? 0;
 
-    const priority =
-      groupPrefix === START_MOTION_PREFIX
-        ? L2DEX_PRIORITY.FORCE
-        : L2DEX_PRIORITY.NORMAL;
-    const selected = selectPresetMotionFromCursor(groupPrefix, priority);
-
-    if (!selected.active) {
-      logScheduler('preset-empty', { groupPrefix });
+    if (foregroundSequence && active.priority < currentPriority) {
       return false;
     }
 
-    return startForegroundSequence(selected.active, {
-      source: `preset:${groupPrefix}`,
-      presetPrefix: groupPrefix,
-      cycleGroup: selected.cycleGroup,
-    });
+    idleRequestToken += 1;
+    foregroundSequence = {
+      requestId: nextRequestId++,
+      source: options.source,
+      presetPrefix: options.presetPrefix,
+      cycleGroup: options.cycleGroup,
+      current: active,
+      pending: [],
+    };
+
+    void playForegroundCurrent(options.source);
+    return true;
   }
 
-  function reconcileIdle(reason: string): void {
-    idleRequestToken += 1;
+  function enqueueReferencedMotion(
+    reference: string,
+    source?: {
+      phase: 'command' | 'post-command';
+      owner?: string;
+    },
+  ): void {
+    const selected = motionSelector.selectReference(reference);
 
-    if (foregroundSequence) {
-      logScheduler('idle-skipped', {
-        reason,
-        foreground: foregroundSequence.current?.selectedMotion.reference,
+    if (!selected) {
+      return;
+    }
+
+    const active: ActiveMotion = {
+      selectedMotion: selected,
+      priority: foregroundSequence?.current?.priority ?? PRIORITY.FORCE,
+    };
+
+    if (!foregroundSequence) {
+      startForegroundSequence(active, {
+        source:
+          source?.owner !== undefined
+            ? `${source.phase}:${source.owner}`
+            : 'derived',
       });
       return;
     }
 
-    if (idleBlockedByEngine) {
-      logScheduler('idle-blocked-by-engine', {
-        reason,
-      });
+    if (shouldDetachMotion(active.selectedMotion.motion)) {
+      void playDetachedMotion(
+        active,
+        source?.owner !== undefined
+          ? `detached:${source.phase}:${source.owner}`
+          : 'detached:derived',
+      );
       return;
     }
 
-    const idle = selectPresetMotionFromCursor(
-      IDLE_MOTION_PREFIX,
-      L2DEX_PRIORITY.IDLE,
-    );
+    foregroundSequence.pending.unshift(active);
+  }
 
-    if (!idle.active) {
-      logScheduler('idle-empty', { reason });
+  async function playForegroundCurrent(source: string): Promise<void> {
+    const sequence = foregroundSequence;
+    const active = sequence?.current;
+
+    if (!sequence || !active) {
       return;
     }
 
-    const token = idleRequestToken;
-    const source = `idle:${reason}`;
-
-    logScheduler('idle-requested', {
-      token,
-      reason,
-      reference: idle.active.selectedMotion.reference,
-      retryCount: idleRetryCount,
+    const status = await playMotion(active, source, () => {
+      completeForegroundCurrent();
     });
 
+    if (status === 'blocked' && foregroundSequence?.requestId === sequence.requestId) {
+      window.setTimeout(() => {
+        if (foregroundSequence?.requestId === sequence.requestId) {
+          void playForegroundCurrent(source);
+        }
+      }, 200);
+      return;
+    }
+
+    if (status === 'rejected' && foregroundSequence?.requestId === sequence.requestId) {
+      foregroundSequence = undefined;
+      requestIdle('foreground-rejected');
+    }
+  }
+
+  function completeForegroundCurrent(): void {
+    const sequence = foregroundSequence;
+    const current = sequence?.current;
+
+    if (!sequence || !current) {
+      return;
+    }
+
+    modelSettingsBridge.applyMotionPostCommand(current.selectedMotion.motion);
+    advancePresetCycleCursor(sequence.cycleGroup, current.selectedMotion.reference);
+
+    const next = sequence.pending.shift();
+
+    if (next) {
+      sequence.current = next;
+      void playForegroundCurrent(`queued:${next.selectedMotion.reference}`);
+      return;
+    }
+
+    const finishedPrefix = sequence.presetPrefix;
+    const finishedGroup = sequence.cycleGroup;
+    foregroundSequence = undefined;
+    advancePresetFamilyCursor(finishedPrefix, finishedGroup);
+    requestIdle('foreground-complete');
+  }
+
+  async function playMotion(
+    active: ActiveMotion,
+    source: string,
+    onComplete: () => void,
+  ): Promise<MotionPlayStatus> {
+    const motion = active.selectedMotion.motion;
+    logMotionStart(active.selectedMotion.reference, active.priority, source);
+
+    if (!motion.File) {
+      applyMotionStartEffects(motion, true);
+      const duration = Math.max(motion.MotionDuration ?? 0, 0);
+
+      if (duration > 0) {
+        window.setTimeout(onComplete, duration);
+      } else {
+        queueMicrotask(onComplete);
+      }
+
+      return 'started';
+    }
+
+    const locator = resolveEngineMotionLocator(active.selectedMotion.reference);
+    await modelSettingsBridge.prepareMotionPlayback(
+      locator.group,
+      locator.index,
+      motion,
+    );
+
+    const enginePriority =
+      active.priority >= PRIORITY.FORCE ? 3 : active.priority >= PRIORITY.NORMAL ? 2 : 1;
+
+    clearStaleReserve();
+
+    if (shouldSkipForCurrentAudio(enginePriority)) {
+      logMotionLifecycle('blocked', active.selectedMotion.reference, source, {
+        enginePriority,
+        reason: 'idle-waits-current-audio',
+        diagnostics: getMotionDiagnostics(active.selectedMotion.reference),
+      });
+      return 'blocked';
+    }
+
+    if (enginePriority >= 2) {
+      stopCurrentAudio();
+    }
+
+    const started = await model.motion(locator.group, locator.index, enginePriority as never, {
+      onError: (error) => {
+        logMotionLifecycle('error', active.selectedMotion.reference, source, {
+          enginePriority,
+          error,
+        });
+      },
+    });
+
+    if (!started) {
+      clearStaleReserve();
+      logMotionLifecycle('rejected', active.selectedMotion.reference, source, {
+        enginePriority,
+        diagnostics: getMotionDiagnostics(active.selectedMotion.reference),
+      });
+      return 'rejected';
+    }
+
+    logMotionLifecycle('started', active.selectedMotion.reference, source, {
+      enginePriority,
+    });
+    if (motion.Sound) {
+      currentEngineAudioOwner = {
+        reference: active.selectedMotion.reference,
+        sound: motion.Sound,
+        source,
+      };
+    }
+    applyMotionStartEffects(motion, false);
+    return 'started';
+  }
+
+  async function playDetachedMotion(
+    active: ActiveMotion,
+    source: string,
+  ): Promise<void> {
+    const motion = active.selectedMotion.motion;
+    logMotionStart(active.selectedMotion.reference, active.priority, source);
+    applyMotionStartEffects(motion, true);
+
+    const duration = Math.max(motion.MotionDuration ?? 0, 0);
+
     window.setTimeout(() => {
-      if (token !== idleRequestToken) {
-        logScheduler('idle-cancelled', { token, reason: 'superseded' });
+      modelSettingsBridge.applyMotionPostCommand(motion);
+      requestIdle('detached-motion-complete');
+    }, duration);
+  }
+
+  function applyMotionStartEffects(motion: MotionItem, playMotionSound: boolean): void {
+    modelSettingsBridge.applyMotionCommand(motion);
+    motionVariables.applyAssignments(motion);
+    showMotionDialog(motion);
+
+    if (playMotionSound) {
+      playSound(motion.Sound);
+    }
+  }
+
+  function requestIdle(reason: string): void {
+    const token = ++idleRequestToken;
+
+    window.setTimeout(() => {
+      if (token !== idleRequestToken || foregroundSequence) {
         return;
       }
 
-      if (foregroundSequence) {
-        logScheduler('idle-cancelled', { token, reason: 'foreground-active' });
+      const selected = selectPresetMotion(IDLE_MOTION_PREFIX, PRIORITY.IDLE);
+
+      if (!selected.active) {
         return;
       }
 
-      void playMotion(idle.active, source, false).then((started) => {
-        if (token !== idleRequestToken || foregroundSequence) {
-          return;
+      void playMotion(selected.active, `idle:${reason}`, () => {}).then((status) => {
+        if (status === 'blocked' && token === idleRequestToken && !foregroundSequence) {
+          window.setTimeout(() => requestIdle('engine-blocked'), 200);
         }
-
-        if (started) {
-          idleRetryCount = 0;
-          logScheduler('idle-started', {
-            token,
-            reference: idle.active?.selectedMotion.reference,
-            playing: motionManager?.playing,
-          });
-          return;
-        }
-
-        if (motionManager?.playing) {
-          idleBlockedByEngine = true;
-          logScheduler('idle-wait-motion-finish', {
-            reference: idle.active.selectedMotion.reference,
-            source,
-          });
-          return;
-        }
-
-        scheduleIdleRetry(idle.active.selectedMotion.reference, source);
       });
     }, 50);
   }
 
-  function scheduleIdleRetry(reference: string, source: string): void {
-    idleRetryCount += 1;
-    cancelIdleRetry('reschedule');
-
-    const delay = idleRetryCount > 5 ? 1000 : 120;
-    logScheduler('idle-retry-scheduled', {
-      reference,
-      source,
-      retryCount: idleRetryCount,
-      delay,
-      playing: motionManager?.playing,
-    });
-
-    idleRetryTimer = window.setTimeout(() => {
-      idleRetryTimer = undefined;
-      reconcileIdle(`retry:${idleRetryCount}`);
-    }, delay);
-  }
-
-  function cancelIdleRetry(reason: string): void {
-    if (idleRetryTimer !== undefined) {
-      window.clearTimeout(idleRetryTimer);
-      idleRetryTimer = undefined;
-      logScheduler('idle-retry-cancelled', { reason });
-    }
-  }
-
-  function selectPresetMotionFromCursor(
+  function selectPresetMotion(
     groupPrefix: string,
     priority: number,
   ): {
@@ -593,38 +471,6 @@ export function createMotionController(
     }
 
     return { group, index };
-  }
-
-  function logMotionStart(ref: string, priority: number, source: string): void {
-    console.log(
-      `${getTimestamp()} Motion: ${ref} | Priority: ${priority} | Source: ${source} | Vars:`,
-      motionVariables.entries(),
-    );
-    logScheduler('slot-start', { ref, priority, source });
-  }
-
-  function logScheduler(event: string, detail?: Record<string, unknown>): void {
-    if (!debugTouch) {
-      return;
-    }
-
-    console.log(`${getTimestamp()} Scheduler: ${event}`, {
-      ...detail,
-      foregroundRequestId: foregroundSequence?.requestId,
-      foregroundSource: foregroundSequence?.source,
-      foregroundCurrent: foregroundSequence?.current?.selectedMotion.reference,
-      foregroundQueue:
-        foregroundSequence?.pending.map(
-          ({ selectedMotion }) => selectedMotion.reference,
-        ) ?? [],
-      playing: motionManager?.playing,
-    });
-  }
-
-  function playSound(path?: string): void {
-    if (path) {
-      new Audio(path).play().catch(() => {});
-    }
   }
 
   function advancePresetCycleCursor(group: string | undefined, ref: string): void {
@@ -736,13 +582,191 @@ export function createMotionController(
     modelDialog.showMotion(motion, (choice) => startReferencedMotion(choice.NextMtn));
   }
 
+  function logMotionStart(ref: string, priority: number, source: string): void {
+    if (!debugTouch) {
+      return;
+    }
+
+    console.log(
+      `${getTimestamp()} Motion: ${ref} | Priority: ${priority} | Source: ${source} | Vars:`,
+      motionVariables.entries(),
+    );
+  }
+
+  function logMotionLifecycle(
+    event: 'started' | 'blocked' | 'rejected' | 'error',
+    ref: string,
+    source: string,
+    extra?: Record<string, unknown>,
+  ): void {
+    if (!debugTouch) {
+      return;
+    }
+
+    console.log(`${getTimestamp()} Motion:${event} ${ref}`, {
+      source,
+      ...extra,
+    });
+  }
+
+  function getMotionDiagnostics(reference: string): Record<string, unknown> {
+    const state = motionManager?.state as
+      | {
+          currentPriority?: number;
+          reservePriority?: number;
+          currentGroup?: string;
+          currentIndex?: number;
+          reservedGroup?: string;
+          reservedIndex?: number;
+          reservedIdleGroup?: string;
+          reservedIdleIndex?: number;
+          isActive?: (group: string, index: number) => boolean;
+        }
+      | undefined;
+
+    const current = foregroundSequence?.current;
+    let engineLocator:
+      | {
+          group: string;
+          index: number;
+        }
+      | undefined;
+
+    try {
+      engineLocator = resolveEngineMotionLocator(reference);
+    } catch {
+      engineLocator = undefined;
+    }
+
+    return {
+      playing: motionManager?.playing,
+      currentAudio: getCurrentAudioDiagnostics(),
+      foregroundCurrent: current?.selectedMotion.reference,
+      foregroundQueue:
+        foregroundSequence?.pending.map(
+          ({ selectedMotion }) => selectedMotion.reference,
+        ) ?? [],
+      state: state
+        ? {
+            currentPriority: state.currentPriority,
+            reservePriority: state.reservePriority,
+            currentGroup: state.currentGroup,
+            currentIndex: state.currentIndex,
+            reservedGroup: state.reservedGroup,
+            reservedIndex: state.reservedIndex,
+            reservedIdleGroup: state.reservedIdleGroup,
+            reservedIdleIndex: state.reservedIdleIndex,
+            isCurrentActive:
+              engineLocator && state.isActive
+                ? state.isActive(engineLocator.group, engineLocator.index)
+                : undefined,
+          }
+        : undefined,
+    };
+  }
+
+  function playSound(path?: string): void {
+    if (path) {
+      new Audio(path).play().catch(() => {});
+    }
+  }
+
+  function shouldDetachMotion(motion: MotionItem): boolean {
+    return !motion.File && Math.max(motion.MotionDuration ?? 0, 0) > 0;
+  }
+
+  function shouldSkipForCurrentAudio(enginePriority: number): boolean {
+    const currentAudio = getCurrentAudio();
+
+    return enginePriority === 1 && currentAudio?.isPlaying === true;
+  }
+
+  function getCurrentAudio():
+    | {
+        isPlaying?: boolean;
+        url?: string;
+      }
+    | undefined {
+    return (
+      motionManager as
+        | {
+            currentAudio?: {
+              isPlaying?: boolean;
+              url?: string;
+            };
+          }
+        | undefined
+    )?.currentAudio;
+  }
+
+  function getCurrentAudioDiagnostics(): Record<string, unknown> | undefined {
+    const currentAudio = getCurrentAudio();
+
+    if (!currentAudio) {
+      return undefined;
+    }
+
+    return {
+      isPlaying: currentAudio.isPlaying,
+      url: currentAudio.url,
+      owner: currentEngineAudioOwner,
+    };
+  }
+
+  function stopCurrentAudio(): void {
+    const manager = motionManager as
+      | {
+          stopSpeaking?: () => void;
+          currentAudio?: {
+            isPlaying?: boolean;
+            stop?: () => void;
+            pause?: () => void;
+          };
+        }
+      | undefined;
+
+    if (!manager?.currentAudio?.isPlaying) {
+      return;
+    }
+
+    if (manager.stopSpeaking) {
+      manager.stopSpeaking();
+      return;
+    }
+
+    manager.currentAudio.stop?.();
+    manager.currentAudio.pause?.();
+  }
+
+  function clearStaleReserve(): void {
+    const state = motionManager?.state as
+      | {
+          currentPriority?: number;
+          reservePriority?: number;
+          setReserved?: (
+            group: string | undefined,
+            index: number | undefined,
+            priority: number,
+          ) => void;
+        }
+      | undefined;
+
+    if (
+      state?.setReserved &&
+      state.currentPriority === 0 &&
+      (state.reservePriority ?? 0) > 0
+    ) {
+      state.setReserved(undefined, undefined, 0);
+    }
+  }
+
   return {
     notifyUserActivity,
     startPresetMotionCycle,
     playTouchMotion,
     startDefaultMotionCycle,
     requestIdleMotionCycle() {
-      reconcileIdle('public-api');
+      requestIdle('public-api');
     },
     startReferencedMotion,
   };

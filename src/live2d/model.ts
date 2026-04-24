@@ -24,7 +24,7 @@ export async function loadModel(
       autoHitTest: true,
       lipSyncGain: modelSettings.Controllers.LipSync.Gain,
       idleMotionGroup: '__DISABLED__', // 使用非空字符串避开 options.idleMotionGroup || 'Idle' 的回退逻辑
-      motionPreload: MotionPreloadStrategy.NONE,
+      motionPreload: MotionPreloadStrategy.ALL,
     },
   );
   // xy偏移
