@@ -134,6 +134,7 @@ export function createMotionController(
     
     // 如果没有正在播放的 Slot，或者 ID 已经失效，强制回到 Idle
     if (!motionScheduler.currentMotionSlot || currentId === undefined) {
+      if (debugTouch) console.log(`${getTimestamp()} No active slot on finish, requesting idle...`);
       requestIdleMotion();
       return;
     }
@@ -167,18 +168,22 @@ export function createMotionController(
 
   function requestIdleMotion(): void {
     const requestId = ++idleRequestId;
+    // 增加 50ms 延迟确保引擎状态位彻底清理，避开同优先级竞争
     window.setTimeout(() => {
-        // 只有当没有更高优先级的“交互”在进行，且请求 ID 匹配时才启动 Idle
+        // 只有当没有更高优先级的“交互/脚本”在进行，且请求 ID 匹配时才启动 Idle
         if (requestId === idleRequestId && !motionScheduler.isInteractionActive) {
             assignSlotsAndStart(IDLE_MOTION_PREFIX, L2DEX_PRIORITY.IDLE);
         }
-    }, 0);
+    }, 50);
   }
 
   function reevaluateIdleSlot(): void {
-      if (motionScheduler.presetPrefix !== IDLE_MOTION_PREFIX || motionScheduler.isInteractionActive) return;
+      // 如果正在播交互动作（Priority 2/9），不干扰背景，等播完自然回到 Idle
+      if (motionScheduler.isInteractionActive || motionScheduler.presetPrefix !== IDLE_MOTION_PREFIX) return;
+      
       const current = motionScheduler.currentMotionSlot;
       if (!current || !motionVariables.matches(current.selectedMotion.motion)) {
+          if (debugTouch) console.log(`${getTimestamp()} Idle condition changed, re-scheduling...`);
           requestIdleMotion();
       }
   }
@@ -208,7 +213,7 @@ export function createMotionController(
       showMotionDialog(motion);
       playSound(motion.Sound);
     } else if (motionScheduler.requestId === requestId) {
-      // 被拒后的自愈逻辑：如果是 Idle 则重试，否则跳过
+      // 如果被拒且是 Idle，稍后重试；否则视为当前 Slot 失败，尝试推向下一个或回归 Idle
       if (motionScheduler.presetPrefix === IDLE_MOTION_PREFIX) {
           window.setTimeout(() => requestIdleMotion(), 100);
       } else {
@@ -221,7 +226,19 @@ export function createMotionController(
   async function startEngineMotion(active: ActiveMotion): Promise<boolean> {
     const locator = resolveEngineMotionLocator(active.selectedMotion.reference);
     await modelSettingsBridge.prepareMotionPlayback(locator.group, locator.index, active.selectedMotion.motion);
-    return model.motion(locator.group, locator.index, active.priority as any);
+    
+    /**
+     * 引擎优先级映射逻辑：
+     * L2DEX 1 (Idle)   -> Engine 2 (NORMAL)
+     * L2DEX 2 (Normal) -> Engine 2 (NORMAL)
+     * L2DEX 9 (Force)  -> Engine 3 (FORCE)
+     * 理由：Engine 2 允许自我覆盖和互相淡入，能消除 Bind Pose 抖动并支持动态切换。
+     */
+    let enginePriority: number;
+    if (active.priority >= L2DEX_PRIORITY.FORCE) enginePriority = 3;
+    else enginePriority = 2;
+
+    return model.motion(locator.group, locator.index, enginePriority as any);
   }
 
   function advanceMotionScheduler(requestId: number): void {
@@ -253,12 +270,20 @@ export function createMotionController(
       if (!current) return;
 
       const newRequestId = nextRequestId++;
-      const canInterrupt = !motionScheduler.currentMotionSlot || priority >= motionScheduler.currentMotionSlot.priority;
+      // 判断是否可以中断当前动作：新动作优先级更高或相等时允许（支持 Idle 自我覆盖）
+      const currentPriority = motionScheduler.currentMotionSlot?.priority ?? 0;
+      const canInterrupt = priority >= currentPriority;
 
       if (canInterrupt) {
           motionScheduler.presetPrefix = groupPrefix;
           motionScheduler.cycleGroup = cycleGroup;
           motionScheduler.nextMotionSlot = next;
+          
+          // 如果是交互动作或 Start 动作，标记为活跃状态，直到序列播完
+          if (priority >= L2DEX_PRIORITY.NORMAL) {
+              motionScheduler.isInteractionActive = true;
+          }
+          
           void playScheduledMotionItem(current, newRequestId);
       }
   }
@@ -266,7 +291,6 @@ export function createMotionController(
   // --- API 接入 ---
 
   function playTouchMotion(action: TouchAction): void {
-    // 如果已经有正在播放的交互动作，不予打断（L2DEX 规则）
     if (motionScheduler.isInteractionActive) return;
 
     const selected = action.kind === 'script' 
@@ -277,7 +301,7 @@ export function createMotionController(
 
     const requestId = nextRequestId++;
     motionScheduler.isInteractionActive = true;
-    motionScheduler.presetPrefix = undefined; // 交互不是预定义周期
+    motionScheduler.presetPrefix = undefined; 
     
     void playScheduledMotionItem({ selectedMotion: selected, priority: L2DEX_PRIORITY.NORMAL }, requestId);
   }
@@ -286,14 +310,14 @@ export function createMotionController(
       const selected = motionSelector.selectReference(reference);
       if (!selected) return;
 
-      // start_mtn 指令通常意味着强行打断当前所有，开启一个独立的前景动作
       const requestId = nextRequestId++;
-      motionScheduler.isInteractionActive = true;
+      motionScheduler.isInteractionActive = true; 
       void playScheduledMotionItem({ selectedMotion: selected, priority: L2DEX_PRIORITY.FORCE }, requestId);
   }
 
   function startPresetMotionCycle(groupPrefix: string): boolean {
-    assignSlotsAndStart(groupPrefix, L2DEX_PRIORITY.NORMAL);
+    const priority = groupPrefix === START_MOTION_PREFIX ? L2DEX_PRIORITY.FORCE : L2DEX_PRIORITY.NORMAL;
+    assignSlotsAndStart(groupPrefix, priority);
     return true;
   }
 
