@@ -40,6 +40,11 @@ type ActiveMotion = {
 
 type MotionPlayStatus = 'started' | 'blocked' | 'rejected';
 
+type MotionLocator = {
+  group: string;
+  index: number;
+};
+
 type ForegroundSequence = {
   requestId: number;
   source: string;
@@ -75,6 +80,7 @@ export function createMotionController(
   let foregroundSequence: ForegroundSequence | undefined;
   let idleRequestToken = 0;
   let leaveTimer: number | undefined;
+  const activeLayeredIdleGroups = new Set<string>();
   let currentEngineAudioOwner:
     | {
         reference: string;
@@ -372,6 +378,11 @@ export function createMotionController(
       };
     }
     applyMotionStartEffects(motion, false);
+
+    if (source === `preset:${START_MOTION_PREFIX}`) {
+      void startLayeredIdleMotions();
+    }
+
     return 'started';
   }
 
@@ -473,6 +484,88 @@ export function createMotionController(
     return { group, index };
   }
 
+  async function startLayeredIdleMotions(): Promise<void> {
+    const groups = getLayeredIdleGroups();
+
+    for (const group of groups) {
+      if (activeLayeredIdleGroups.has(group)) {
+        continue;
+      }
+
+      const selected = motionSelector.selectGroup(group);
+
+      if (!selected?.motion.File) {
+        continue;
+      }
+
+      const locator = resolveEngineMotionLocator(selected.reference);
+      const started = await playLayeredMotion(
+        locator,
+        selected,
+        PRIORITY.IDLE,
+        'layered-idle',
+      );
+
+      if (started) {
+        activeLayeredIdleGroups.add(group);
+      }
+    }
+  }
+
+  async function playLayeredMotion(
+    locator: MotionLocator,
+    selected: SelectedMotion,
+    priority: number,
+    source: string,
+  ): Promise<boolean> {
+    const layer = getMotionLayer(locator.group);
+
+    if (layer === undefined || layer <= 0) {
+      return false;
+    }
+
+    const parallel = model.internalModel as
+      | {
+          extendParallelMotionManager?: (count: number) => void;
+          parallelMotionManager?: {
+            startMotion?: (
+              group: string,
+              index: number,
+              priority?: number,
+            ) => Promise<boolean>;
+          }[];
+        }
+      | undefined;
+
+    parallel?.extendParallelMotionManager?.(layer);
+
+    const manager = parallel?.parallelMotionManager?.[layer - 1];
+
+    if (!manager?.startMotion) {
+      return false;
+    }
+
+    await modelSettingsBridge.prepareMotionPlayback(
+      locator.group,
+      locator.index,
+      selected.motion,
+    );
+
+    logMotionStart(selected.reference, priority, source);
+
+    const started = await manager.startMotion(
+      locator.group,
+      locator.index,
+      priority >= PRIORITY.FORCE ? 3 : priority >= PRIORITY.NORMAL ? 2 : 1,
+    );
+
+    logMotionLifecycle(started ? 'started' : 'rejected', selected.reference, source, {
+      layer,
+    });
+
+    return started;
+  }
+
   function advancePresetCycleCursor(group: string | undefined, ref: string): void {
     if (!group) {
       return;
@@ -537,6 +630,24 @@ export function createMotionController(
         .flat()
         .map((group) => [group, 0]),
     );
+  }
+
+  function getLayeredIdleGroups(): string[] {
+    return Object.keys(modelSettings.FileReferences.Motions).filter(
+      (group) => group.startsWith(`${IDLE_MOTION_PREFIX}#`) && getMotionLayer(group) !== undefined,
+    );
+  }
+
+  function getMotionLayer(group: string): number | undefined {
+    const match = group.match(/#(\d+)$/);
+
+    if (!match) {
+      return undefined;
+    }
+
+    const layer = Number(match[1]);
+
+    return Number.isInteger(layer) && layer > 0 ? layer : undefined;
   }
 
   function startDefaultMotionCycle(): void {
