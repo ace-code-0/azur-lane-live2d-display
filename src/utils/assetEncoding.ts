@@ -1,29 +1,29 @@
 // 路径：src/utils/assetEncoding.ts
 
-const UNRESERVED = /[A-Za-z0-9.\-]/; // 保留字符
+/**
+ * 保留字符集：字母、数字、点(.)、下划线(_)、连字符(-)
+ * 注意：根据要求，下划线不再进行替换。
+ */
+const UNRESERVED = /[A-Za-z0-9._\-]/;
 
 /**
  * 将资产名称编码为安全的 URL/文件名格式
  * 规则：
- * _  → __
- * 其他非保留字符 → _ + 两位十六进制 ASCII
+ * 1. 保留字符直接输出
+ * 2. 其他字符转换为 ascii__[两位十六进制ASCII]
+ * 示例：'#' -> 'ascii__23'
  */
 export function encodeAssetName(input: string): string {
   let out = '';
 
   for (const ch of input) {
-    if (ch === '_') {
-      out += '__';
-      continue;
-    }
-
     if (UNRESERVED.test(ch)) {
       out += ch;
       continue;
     }
 
-    const code = ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
-    out += '_' + code;
+    const hex = ch.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0');
+    out += `ascii__${hex}`;
   }
 
   return out;
@@ -33,37 +33,8 @@ export function encodeAssetName(input: string): string {
  * 解码由 encodeAssetName 编码的资产名称
  */
 export function decodeAssetName(input: string): string {
-  let out = '';
-
-  for (let i = 0; i < input.length; i++) {
-    const ch = input[i];
-
-    if (ch !== '_') {
-      out += ch;
-      continue;
-    }
-
-    const next = input[i + 1];
-
-    // "__" → "_"
-    if (next === '_') {
-      out += '_';
-      i++;
-      continue;
-    }
-
-    // "_XX" → hex
-    const hex = input.slice(i + 1, i + 3);
-
-    if (/^[0-9A-Fa-f]{2}$/.test(hex)) {
-      out += String.fromCharCode(parseInt(hex, 16));
-      i += 2;
-      continue;
-    }
-
-    // fallback（理论不会发生）
-    out += '_';
-  }
-
-  return out;
+  // 使用正则匹配 ascii__[XX] 并还原
+  return input.replace(/ascii__([0-9A-Fa-f]{2})/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
 }
