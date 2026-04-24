@@ -1,5 +1,13 @@
 import type { MotionItem, Settings } from './modelSettings';
 
+/**
+ * 获取当前格式化时间戳 [HH:mm:ss]
+ */
+export function getTimestamp(): string {
+  const now = new Date();
+  return `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
+}
+
 export class MotionVariableStore {
   private readonly values: Map<string, number>;
 
@@ -30,7 +38,11 @@ export class MotionVariableStore {
     );
   }
 
+  /**
+   * 应用变量赋值并输出变动日志
+   */
   applyAssignments(motion: MotionItem): void {
+    const changes: string[] = [];
     for (const variable of motion.VarFloats ?? []) {
       if (variable.Type !== 2) {
         continue;
@@ -39,8 +51,16 @@ export class MotionVariableStore {
       const value = parseVariableCode(variable.Code, 'assign');
 
       if (value !== undefined) {
-        this.values.set(variable.Name, value);
+        const oldValue = this.values.get(variable.Name);
+        if (oldValue !== value) {
+          this.values.set(variable.Name, value);
+          changes.push(`${variable.Name}: ${value}`);
+        }
       }
+    }
+
+    if (changes.length > 0) {
+      console.log(`${getTimestamp()} Vars: ${changes.join(', ')}`);
     }
   }
 }
@@ -65,11 +85,12 @@ function parseVariableCode(
 ): number | undefined {
   const [actualOperator, value] = code.trim().split(/\s+/, 2);
 
-  if (actualOperator !== operator || value === undefined) {
+  if (actualOperator !== code && actualOperator !== operator) {
     return undefined;
   }
-
-  const parsedValue = Number(value);
+  
+  // 某些情况下 code 可能直接是数字（即 assign 操作）
+  const parsedValue = value === undefined ? Number(actualOperator) : Number(value);
 
   return Number.isFinite(parsedValue) ? parsedValue : undefined;
 }

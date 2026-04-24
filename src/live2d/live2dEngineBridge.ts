@@ -1,12 +1,12 @@
+import { encodeAssetName } from '../utils/assetEncoding';
+import type { Cubism4Model } from './model';
+import type { FileReferences, MotionItem, Settings } from './modelSettings';
+
 export {
   Live2DModel,
   MotionPreloadStrategy,
   MotionPriority,
 } from 'untitled-pixi-live2d-engine/cubism';
-
-import { encodeAssetName } from '../utils/assetEncoding';
-import type { Cubism4Model } from './model';
-import type { FileReferences, MotionItem, Settings } from './modelSettings';
 
 export type ModelSettingsBridge = {
   applyInitialSettings(): void;
@@ -30,6 +30,12 @@ export type EngineModelSettings = Settings & {
 
 type BridgeCallbacks = {
   startReferencedMotion(reference: string): void;
+  onCommand?: (
+    namespace: string,
+    action: string,
+    target?: string,
+    value?: string,
+  ) => void;
 };
 
 type CoreModelAdapter = {
@@ -178,6 +184,8 @@ export function createModelSettingsBridge(
     for (const statement of splitCommand(command)) {
       const [namespace, action, target, rawValue] = statement.split(/\s+/, 4);
 
+      callbacks.onCommand?.(namespace, action, target, rawValue);
+
       if (namespace === 'mouse_tracking') {
         const enabled = action === 'enable';
         setMouseTrackingEnabled(model, enabled);
@@ -275,15 +283,13 @@ export function createModelSettingsBridge(
       index: number,
       motion: MotionItem,
     ): Promise<void> {
-      if (!motion.FileLoop) {
-        return;
-      }
-
       const loadedMotion = await internalModel.motionManager
         ?.loadMotion?.(group, index)
         .catch(() => undefined);
 
-      loadedMotion?.setLoop?.(true);
+      if (motion.FileLoop) {
+        loadedMotion?.setLoop?.(true);
+      }
     },
   };
 
