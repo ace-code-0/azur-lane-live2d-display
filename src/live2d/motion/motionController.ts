@@ -10,7 +10,7 @@ import { createMotionReference } from './motionReference';
 import { MotionVariableStore, getTimestamp } from './motionVariables';
 
 import type { Cubism4Model } from '@/live2d/model';
-import type { ModelDialogElement } from '@/ui/modelDialog';
+import type { DialogElement } from '@/ui/dialog/dialog';
 import type { MotionItem, Settings } from '@/live2d/settings/modelSettings.types';
 import type { TouchAction } from '@/live2d/interactions/touchActions';
 import type { SelectedMotion } from './motionSelection';
@@ -66,7 +66,7 @@ export type MotionController = {
 export function createMotionController(
   model: Cubism4Model,
   modelSettings: Settings,
-  modelDialog: ModelDialogElement,
+  modelDialog: DialogElement,
   debugTouch: boolean,
 ): MotionController {
   const motionManager = model.internalModel?.motionManager;

@@ -1,5 +1,5 @@
 import { html, LitElement } from 'lit';
-import { modelDialogStyles } from './modelDialog.styles';
+import { dialogStyles } from './styles';
 
 const TEXT_BASE_DURATION_MS = 1_200;
 const TEXT_PER_UNIT_MS = 60;
@@ -32,7 +32,7 @@ function estimateUnits(text: string): number {
   return units;
 }
 
-type ModelDialogState =
+type DialogState =
   | {
       visible: false;
     }
@@ -47,9 +47,9 @@ export type DialogChoice = {
   onSelect: () => void;
 };
 
-export class ModelDialogElement extends LitElement {
-  static override styles = modelDialogStyles;
-  private dialogState: ModelDialogState = { visible: false };
+export class DialogElement extends LitElement {
+  static override styles = dialogStyles;
+  private dialogState: DialogState = { visible: false };
   private closeTimer: number | undefined;
 
   get isVisible(): boolean {
@@ -123,7 +123,7 @@ export class ModelDialogElement extends LitElement {
     this.closeTimer = window.setTimeout(() => this.hide(), CHOICES_DURATION_MS);
   }
 
-  private setDialog(state: ModelDialogState): void {
+  private setDialog(state: DialogState): void {
     window.clearTimeout(this.closeTimer);
     this.closeTimer = undefined;
     this.dialogState = state;
@@ -138,8 +138,8 @@ export class ModelDialogElement extends LitElement {
   }
 }
 
-export function createModelDialog(root: HTMLElement): ModelDialogElement {
-  const dialog = document.createElement('model-dialog') as ModelDialogElement;
+export function createModelDialog(root: HTMLElement): DialogElement {
+  const dialog = document.createElement('ui-dialog') as DialogElement;
   root.append(dialog);
 
   return dialog;
@@ -155,4 +155,4 @@ function getTextDurationMs(text: string): number {
   );
 }
 
-customElements.define('model-dialog', ModelDialogElement);
+customElements.define('ui-dialog', DialogElement);

@@ -1,6 +1,6 @@
 import { css } from 'lit';
 
-export const modelDialogStyles = css`
+export const dialogStyles = css`
   :host {
     position: fixed;
     inset: 0;
