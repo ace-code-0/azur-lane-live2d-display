@@ -1,5 +1,6 @@
 import { encodeAssetName } from '../utils/assetEncoding';
 import type { Cubism4Model } from './model';
+import { VARIABLE_RULE_TYPE } from './modelSettings';
 import type { FileReferences, MotionItem, Settings } from './modelSettings';
 
 export {
@@ -132,7 +133,9 @@ export function isExecutableModelMotion(motion: MotionItem): boolean {
       motion.Command !== undefined ||
       motion.PostCommand !== undefined ||
       motion.MotionDuration !== undefined ||
-      (motion.VarFloats?.some(({ Type }) => Type === 2) ?? false))
+      (motion.VarFloats?.some(
+        ({ Type }) => Type === VARIABLE_RULE_TYPE.Assignment,
+      ) ?? false))
   );
 }
 

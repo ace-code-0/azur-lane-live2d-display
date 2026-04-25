@@ -5,6 +5,7 @@ import { getMotion3ParameterTargetValue } from './motion3File';
 
 import type { PixiApplication } from './app';
 import type { Cubism4Model } from './model';
+import { PARAMETER_RELEASE_TYPE, POINTER_AXIS } from './modelSettings';
 import type { ParamHitItem, Settings } from './modelSettings';
 
 const DRAG_DISTANCE_THRESHOLD = 8;
@@ -212,7 +213,7 @@ function getDragValue(
   state: ParamHitState,
 ): number {
   const delta =
-    state.target.item.Axis === 0
+    state.target.item.Axis === POINTER_AXIS.X
       ? event.global.x - state.startX
       : event.global.y - state.startY;
   const value = state.startValue + delta * state.target.item.Factor;
@@ -232,7 +233,7 @@ function hasReachedTarget(value: number, targetValue: number): boolean {
 }
 
 function releaseParameter(model: Cubism4Model, item: ParamHitItem): void {
-  if (item.ReleaseType === 0) {
+  if (item.ReleaseType === PARAMETER_RELEASE_TYPE.ResetToDefault) {
     setModelParameter(model, item.Id, 0);
   }
 }

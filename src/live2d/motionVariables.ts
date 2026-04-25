@@ -1,3 +1,4 @@
+import { VARIABLE_RULE_TYPE } from './modelSettings';
 import type { MotionItem, Settings } from './modelSettings';
 
 /**
@@ -24,7 +25,7 @@ export class MotionVariableStore {
   matches(motion: MotionItem): boolean {
     return (
       motion.VarFloats?.every((variable) => {
-        if (variable.Type !== 1) {
+        if (variable.Type !== VARIABLE_RULE_TYPE.Condition) {
           return true;
         }
 
@@ -44,7 +45,7 @@ export class MotionVariableStore {
   applyAssignments(motion: MotionItem): void {
     const changes: string[] = [];
     for (const variable of motion.VarFloats ?? []) {
-      if (variable.Type !== 2) {
+      if (variable.Type !== VARIABLE_RULE_TYPE.Assignment) {
         continue;
       }
 
