@@ -1,12 +1,14 @@
 import * as PIXI from 'pixi.js';
 
-import { setModelParameter } from './live2dEngineBridge';
-import { getMotion3ParameterTargetValue } from './motion3File';
+import { setModelParameter } from '@/live2d/engine/live2dEngineBridge';
+import { getMotion3ParameterTargetValue } from '@/live2d/motion/motion3File';
 
-import type { PixiApplication } from './app';
-import type { Cubism4Model } from './model';
-import { PARAMETER_RELEASE_TYPE, POINTER_AXIS } from './modelSettings';
-import type { ParamHitItem, Settings } from './modelSettings';
+import type { PixiApplication } from '@/live2d/app';
+import type { Cubism4Model } from '@/live2d/model';
+import type {
+  ParamHitItem,
+  Settings,
+} from '@/live2d/settings/modelSettings.types';
 
 const DRAG_DISTANCE_THRESHOLD = 8;
 const TAP_SUPPRESSION_MS = 250;
@@ -213,7 +215,7 @@ function getDragValue(
   state: ParamHitState,
 ): number {
   const delta =
-    state.target.item.Axis === POINTER_AXIS.X
+    isHorizontalDrag(state.target.item)
       ? event.global.x - state.startX
       : event.global.y - state.startY;
   const value = state.startValue + delta * state.target.item.Factor;
@@ -233,9 +235,17 @@ function hasReachedTarget(value: number, targetValue: number): boolean {
 }
 
 function releaseParameter(model: Cubism4Model, item: ParamHitItem): void {
-  if (item.ReleaseType === PARAMETER_RELEASE_TYPE.ResetToDefault) {
+  if (shouldResetParameterOnRelease(item)) {
     setModelParameter(model, item.Id, 0);
   }
+}
+
+function isHorizontalDrag(item: ParamHitItem): boolean {
+  return item.Axis === 0;
+}
+
+function shouldResetParameterOnRelease(item: ParamHitItem): boolean {
+  return item.ReleaseType === 0;
 }
 
 function getPointerDistance(

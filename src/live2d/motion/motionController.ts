@@ -1,7 +1,7 @@
 import {
   createModelSettingsBridge,
   getModelMotions,
-} from './live2dEngineBridge';
+} from '@/live2d/engine/live2dEngineBridge';
 import {
   createMotionSelector,
   parseSelectedMotionReference,
@@ -9,10 +9,10 @@ import {
 import { createMotionReference } from './motionReference';
 import { MotionVariableStore, getTimestamp } from './motionVariables';
 
-import type { Cubism4Model } from './model';
-import type { ModelDialogElement } from '../ui/modelDialog';
-import type { MotionItem, Settings } from './modelSettings';
-import type { TouchAction } from './touchActions';
+import type { Cubism4Model } from '@/live2d/model';
+import type { ModelDialogElement } from '@/ui/modelDialog';
+import type { MotionItem, Settings } from '@/live2d/settings/modelSettings.types';
+import type { TouchAction } from '@/live2d/interactions/touchActions';
 import type { SelectedMotion } from './motionSelection';
 
 const IDLE_MOTION_PREFIX = 'Idle';

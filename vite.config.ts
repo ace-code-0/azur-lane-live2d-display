@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vite';
-import { createModelAssetAliasPath } from './src/live2d/modelAssetPath';
+import { createModelAssetAliasPath } from './src/live2d/settings/modelAssetPath';
 
 const modelDir = path.resolve('public/model');
 
@@ -28,6 +28,11 @@ const getModelAliases = () => {
 
 export default defineConfig({
   base: '/',
+  resolve: {
+    alias: {
+      '@': path.resolve('src'),
+    },
+  },
   plugins: [
     {
       name: 'model-alias-plugin',

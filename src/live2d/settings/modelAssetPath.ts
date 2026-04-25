@@ -1,5 +1,5 @@
-import { encodeAssetName } from '../utils/assetEncoding';
-import type { MotionItem, Settings } from './modelSettings';
+import { encodeAssetName } from '../../utils/assetEncoding';
+import type { MotionItem, Settings } from './modelSettings.types';
 
 /**
  * 将原始资产路径转换为编码后的安全别名路径

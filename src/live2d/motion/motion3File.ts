@@ -1,7 +1,7 @@
-import { getModelMotions } from './live2dEngineBridge';
+import { getModelMotions } from '@/live2d/engine/live2dEngineBridge';
 import { parseMotionReference } from './motionReference';
 
-import type { MotionItem, Settings } from './modelSettings';
+import type { MotionItem, Settings } from '@/live2d/settings/modelSettings.types';
 
 type Motion3CurveTarget = 'Model' | 'Parameter' | 'PartOpacity';
 

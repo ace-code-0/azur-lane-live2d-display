@@ -2,12 +2,12 @@ import {
   getModelMotions,
   isEnabledModelMotion,
   isExecutableModelMotion,
-} from './live2dEngineBridge';
+} from '@/live2d/engine/live2dEngineBridge';
 import {
   createMotionReference,
   parseMotionReference,
 } from './motionReference';
-import type { MotionItem, Settings } from './modelSettings';
+import type { MotionItem, Settings } from '@/live2d/settings/modelSettings.types';
 import type { MotionVariableStore } from './motionVariables';
 
 export type SelectedMotion = {

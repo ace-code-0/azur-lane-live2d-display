@@ -1,10 +1,10 @@
 import {
   getModelMotions,
   isExecutableModelMotion,
-} from './live2dEngineBridge';
-import { parseMotionReference } from './motionReference';
+} from '@/live2d/engine/live2dEngineBridge';
+import { parseMotionReference } from '@/live2d/motion/motionReference';
 
-import type { MotionItem, Settings } from './modelSettings';
+import type { MotionItem, Settings } from '@/live2d/settings/modelSettings.types';
 
 export type TouchAction = {
   hitArea: string;

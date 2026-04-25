@@ -1,7 +1,11 @@
-import { encodeAssetName } from '../utils/assetEncoding';
-import type { Cubism4Model } from './model';
-import { VARIABLE_RULE_TYPE } from './modelSettings';
-import type { FileReferences, MotionItem, Settings } from './modelSettings';
+import { encodeAssetName } from '@/utils/assetEncoding';
+import type { Cubism4Model } from '@/live2d/model';
+import type {
+  FileReferences,
+  MotionItem,
+  Settings,
+  VarFloats,
+} from '@/live2d/settings/modelSettings.types';
 
 export {
   Live2DModel,
@@ -133,14 +137,16 @@ export function isExecutableModelMotion(motion: MotionItem): boolean {
       motion.Command !== undefined ||
       motion.PostCommand !== undefined ||
       motion.MotionDuration !== undefined ||
-      (motion.VarFloats?.some(
-        ({ Type }) => Type === VARIABLE_RULE_TYPE.Assignment,
-      ) ?? false))
+      (motion.VarFloats?.some(isVariableAssignment) ?? false))
   );
 }
 
 export function isEnabledModelMotion(motion: MotionItem): boolean {
   return motion.Enabled !== false;
+}
+
+function isVariableAssignment(variable: VarFloats): boolean {
+  return variable.Type === 2;
 }
 
 function createEngineFileReferences(settings: Settings): FileReferences {

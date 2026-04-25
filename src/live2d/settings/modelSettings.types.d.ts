@@ -1,72 +1,27 @@
-import { sanitizeModelSettingsAssetPaths } from './modelAssetPath';
+export type ModelType = 0;
 
-export const MODEL_TYPE = {
-  Live2D: 0,
-} as const;
+export type VariableRuleType = 1 | 2;
 
-export type ModelType = (typeof MODEL_TYPE)[keyof typeof MODEL_TYPE];
+export type ParameterBlendMode = 0 | 1 | 2;
 
-export const VARIABLE_RULE_TYPE = {
-  Condition: 1,
-  Assignment: 2,
-} as const;
+export type PointerAxis = 0 | 1;
 
-export type VariableRuleType =
-  (typeof VARIABLE_RULE_TYPE)[keyof typeof VARIABLE_RULE_TYPE];
+export type ParameterReleaseType = 0;
 
-export const PARAMETER_BLEND_MODE = {
-  Override: 0,
-  Additive: 1,
-  Multiply: 2,
-} as const;
+export type StaticControllerInputSource = 0;
 
-export type ParameterBlendMode =
-  (typeof PARAMETER_BLEND_MODE)[keyof typeof PARAMETER_BLEND_MODE];
+export type MouseControllerInputSource = 1 | 2;
 
-export const POINTER_AXIS = {
-  X: 0,
-  Y: 1,
-} as const;
-
-export type PointerAxis = (typeof POINTER_AXIS)[keyof typeof POINTER_AXIS];
-
-export const PARAMETER_RELEASE_TYPE = {
-  ResetToDefault: 0,
-} as const;
-
-export type ParameterReleaseType =
-  (typeof PARAMETER_RELEASE_TYPE)[keyof typeof PARAMETER_RELEASE_TYPE];
-
-export const CONTROLLER_INPUT_SOURCE = {
-  Static: 0,
-  MouseX: 1,
-  MouseY: 2,
-} as const;
-
-export type ControllerInputSource =
-  (typeof CONTROLLER_INPUT_SOURCE)[keyof typeof CONTROLLER_INPUT_SOURCE];
-
-export const MASK_TEXTURE_FILTER_MODE = {
-  Bilinear: 0,
-  Nearest: 1,
-} as const;
-
-export type MaskTextureFilterMode =
-  (typeof MASK_TEXTURE_FILTER_MODE)[keyof typeof MASK_TEXTURE_FILTER_MODE];
+export type MaskTextureFilterMode = 0 | 1;
 
 export type AnisotropicFilteringLevel = 0 | 2 | 4 | 8 | 16;
 
-export const ARTMESH_CULLING_MODE = {
-  Default: 0,
-} as const;
-
-export type ArtmeshCullingMode =
-  (typeof ARTMESH_CULLING_MODE)[keyof typeof ARTMESH_CULLING_MODE];
+export type ArtmeshCullingMode = 0;
 
 export type VarFloats = {
   // 浮点变量名；变量可用于动作条件判断，也可在动作触发后被写入。
   Name: string;
-  // 变量规则类型：Condition 表示执行前检查，Assignment 表示触发后写入。
+  // 变量规则类型：1 表示执行前检查，2 表示触发后写入。
   Type: VariableRuleType;
   // 条件或操作表达式，例如 `equal 0`、`assign 1`。
   Code: string;
@@ -151,11 +106,11 @@ export type ParamHitItem = {
   Id: string;
   // 触发拖拽的 HitArea 名称。
   HitArea: string;
-  // 鼠标移动使用的轴。
+  // 鼠标移动使用的轴；0 为 X，1 为 Y。
   Axis: PointerAxis;
   // 每移动 1 像素带来的参数变化量。
   Factor: number;
-  // 松开鼠标后的回弹方式。
+  // 松开鼠标后的回弹方式；0 表示重置为默认值。
   ReleaseType: ParameterReleaseType;
   // 参数达到最大值时触发的动作引用。
   MaxMtn: string;
@@ -175,10 +130,10 @@ export type EyeBlinkItem = {
   Min: number;
   // 参数最大值。
   Max: number;
-  // 与动作参数混合时的模式。
+  // 与动作参数混合时的模式：0 覆盖，1 叠加，2 乘算。
   BlendMode: ParameterBlendMode;
   // 固定输入源；眨眼由控制器内部驱动。
-  Input: typeof CONTROLLER_INPUT_SOURCE.Static;
+  Input: StaticControllerInputSource;
 };
 
 export type LipSyncItem = {
@@ -189,7 +144,7 @@ export type LipSyncItem = {
   // 参数最大值。
   Max: number;
   // 固定输入源；口型由音频音量驱动。
-  Input: typeof CONTROLLER_INPUT_SOURCE.Static;
+  Input: StaticControllerInputSource;
 };
 
 export type MouseTrackingItem = {
@@ -201,14 +156,12 @@ export type MouseTrackingItem = {
   Max: number;
   // 鼠标输入居中时的默认参数值。
   DefaultValue: number;
-  // 与动作参数混合时的模式。
+  // 与动作参数混合时的模式：0 覆盖，1 叠加，2 乘算。
   BlendMode: ParameterBlendMode;
   // 鼠标轴；部分配置使用 Input 表达同一语义。
   Axis?: PointerAxis;
-  // 鼠标输入源。
-  Input:
-    | typeof CONTROLLER_INPUT_SOURCE.MouseX
-    | typeof CONTROLLER_INPUT_SOURCE.MouseY;
+  // 鼠标输入源；1 为 X，2 为 Y。
+  Input: MouseControllerInputSource;
 };
 
 export type PartOpacityItem = {
@@ -338,7 +291,7 @@ export type Options = {
   PositionY: number;
   // 边缘填充，用于缓解模型黑边。
   TexFixed: boolean;
-  // 蒙版纹理过滤模式。
+  // 蒙版纹理过滤模式；0 为双线性过滤，1 为最近邻过滤。
   TexType: MaskTextureFilterMode;
 };
 
@@ -356,13 +309,3 @@ export type Settings = {
   // 模型显示选项。
   Options: Options;
 };
-
-export async function loadModelSettings(modelUrl: string): Promise<Settings> {
-  const response = await fetch(modelUrl);
-
-  if (!response.ok) {
-    throw new Error(`Failed to load model settings: ${response.status}`);
-  }
-
-  return sanitizeModelSettingsAssetPaths((await response.json()) as Settings);
-}

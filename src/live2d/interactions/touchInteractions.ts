@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
 
-import type { PixiApplication } from './app';
-import type { Cubism4Model } from './model';
+import type { PixiApplication } from '@/live2d/app';
+import type { Cubism4Model } from '@/live2d/model';
 import type { TouchAction } from './touchActions';
 
 type MotionController = {

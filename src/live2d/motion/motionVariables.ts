@@ -1,5 +1,8 @@
-import { VARIABLE_RULE_TYPE } from './modelSettings';
-import type { MotionItem, Settings } from './modelSettings';
+import type {
+  MotionItem,
+  Settings,
+  VarFloats,
+} from '@/live2d/settings/modelSettings.types';
 
 /**
  * 获取当前格式化时间戳 [HH:mm:ss]
@@ -25,7 +28,7 @@ export class MotionVariableStore {
   matches(motion: MotionItem): boolean {
     return (
       motion.VarFloats?.every((variable) => {
-        if (variable.Type !== VARIABLE_RULE_TYPE.Condition) {
+        if (!isVariableCondition(variable)) {
           return true;
         }
 
@@ -45,7 +48,7 @@ export class MotionVariableStore {
   applyAssignments(motion: MotionItem): void {
     const changes: string[] = [];
     for (const variable of motion.VarFloats ?? []) {
-      if (variable.Type !== VARIABLE_RULE_TYPE.Assignment) {
+      if (!isVariableAssignment(variable)) {
         continue;
       }
 
@@ -64,6 +67,14 @@ export class MotionVariableStore {
       console.log(`${getTimestamp()} Vars: ${changes.join(', ')}`);
     }
   }
+}
+
+function isVariableCondition(variable: VarFloats): boolean {
+  return variable.Type === 1;
+}
+
+function isVariableAssignment(variable: VarFloats): boolean {
+  return variable.Type === 2;
 }
 
 function collectVariableNames(settings: Settings): string[] {

@@ -1,14 +1,14 @@
 import './style.css';
 
-import { createApplication, updateStageHitArea } from './live2d/app';
-import { fitModel, loadModel } from './live2d/model';
-import { loadModelSettings } from './live2d/modelSettings';
-import { createMotionController } from './live2d/motionController';
-import { installParamHitInteractions } from './live2d/paramHitInteractions';
-import { createTouchActions } from './live2d/touchActions';
-import { installTouchDragInteractions } from './live2d/touchDragInteractions';
-import { installTouchInteractions } from './live2d/touchInteractions';
-import { createModelDialog } from './ui/modelDialog';
+import { createApplication, updateStageHitArea } from '@/live2d/app';
+import { fitModel, loadModel } from '@/live2d/model';
+import { installParamHitInteractions } from '@/live2d/interactions/paramHitInteractions';
+import { createTouchActions } from '@/live2d/interactions/touchActions';
+import { installTouchDragInteractions } from '@/live2d/interactions/touchDragInteractions';
+import { installTouchInteractions } from '@/live2d/interactions/touchInteractions';
+import { createMotionController } from '@/live2d/motion/motionController';
+import { loadModelSettings } from '@/live2d/settings/modelSettings';
+import { createModelDialog } from '@/ui/modelDialog';
 
 const MODEL_URL = '/model/model0.json';
 const DEBUG_TOUCH = true;

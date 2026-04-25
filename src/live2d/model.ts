@@ -2,10 +2,10 @@ import {
   createEngineModelSettings,
   Live2DModel,
   MotionPreloadStrategy,
-} from './live2dEngineBridge';
+} from '@/live2d/engine/live2dEngineBridge';
 
-import type { PixiApplication } from './app';
-import type { Options, Settings } from './modelSettings';
+import type { PixiApplication } from '@/live2d/app';
+import type { Options, Settings } from '@/live2d/settings/modelSettings.types';
 
 export type Cubism4Model = Live2DModel;
 
