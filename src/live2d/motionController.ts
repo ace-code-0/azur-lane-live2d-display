@@ -753,9 +753,21 @@ export function createMotionController(
     }
 
     modelDialog.hide();
-    modelDialog.showMotion(motion, (choice) =>
-      startReferencedMotion(choice.NextMtn),
-    );
+
+    if (motion.Choices && motion.Choices.length > 0) {
+      modelDialog.showChoices(
+        motion.Text ?? '',
+        motion.Choices.map((choice) => ({
+          label: choice.Text,
+          onSelect: () => startReferencedMotion(choice.NextMtn),
+        })),
+      );
+      return;
+    }
+
+    if (motion.Text) {
+      modelDialog.showText(motion.Text);
+    }
   }
 
   function logMotionLifecycle(

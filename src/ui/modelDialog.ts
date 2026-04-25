@@ -1,194 +1,102 @@
-import { css, html, LitElement } from 'lit';
+import { html, LitElement } from 'lit';
+import { modelDialogStyles } from './modelDialog.styles';
 
-import type { Choice, MotionItem } from '../live2d/modelSettings';
+const TEXT_BASE_DURATION_MS = 1_200;
+const TEXT_PER_UNIT_MS = 60;
+const TEXT_MIN_DURATION_MS = 1_800;
+const TEXT_MAX_DURATION_MS = 6_000;
+const CHOICES_DURATION_MS = 30_000;
 
-const TEXT_BASE_DURATION_MS = 500;
-const TEXT_PER_CHARACTER_MS = 90;
-const CHOICES_DURATION_MS = 30000;
+function estimateUnits(text: string): number {
+  let units = 0;
 
-type DialogState =
+  for (const ch of text) {
+    if (/\p{Script=Han}/u.test(ch)) {
+      // 所有汉字（完整覆盖 CJK）
+      units += 1;
+    } else if (/\p{Alphabetic}|\p{Number}/u.test(ch)) {
+      // 所有语言字母 + 数字（不止 ASCII）
+      units += 0.5;
+    } else if (/\p{White_Space}/u.test(ch)) {
+      // 所有空白字符
+      units += 0.2;
+    } else if (/\p{Punctuation}/u.test(ch)) {
+      // 标点符号
+      units += 0.3;
+    } else {
+      // 其他符号（emoji、控制符等）
+      units += 0.3;
+    }
+  }
+
+  return units;
+}
+
+type ModelDialogState =
   | {
       visible: false;
     }
   | {
       visible: true;
       text: string;
-      choices: Choice[];
+      choices: DialogChoice[];
     };
 
+export type DialogChoice = {
+  label: string;
+  onSelect: () => void;
+};
+
 export class ModelDialogElement extends LitElement {
-  static override properties = {
-    state: { state: true },
-  };
-
-  static override styles = css`
-    :host {
-      position: fixed;
-      inset: 0;
-      z-index: 1000; /* Increased z-index */
-      pointer-events: none;
-      color: #f8fafc;
-      font-family:
-        Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-        "Segoe UI", sans-serif;
-    }
-
-    .overlay {
-      position: absolute;
-      inset: 0;
-      background: rgb(0 0 0 / 15%);
-      pointer-events: auto;
-      backdrop-filter: blur(1px);
-    }
-
-    .dialog {
-      position: absolute;
-      left: 50%;
-      bottom: max(32px, env(safe-area-inset-bottom));
-      width: min(360px, calc(100vw - 40px)); /* Restored stable width */
-      padding: 14px 18px;
-      border: 1px solid rgb(255 255 255 / 12%);
-      border-radius: 12px;
-      background: rgb(15 23 42 / 92%);
-      box-shadow: 0 10px 30px rgb(0 0 0 / 50%);
-      backdrop-filter: blur(20px);
-      pointer-events: auto;
-      display: flex;
-      flex-direction: column;
-      transform: translateX(-50%);
-    }
-
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 10px;
-    }
-
-    .text {
-      margin: 0;
-      font-size: 14px;
-      font-weight: 500;
-      line-height: 1.5;
-      overflow-wrap: anywhere;
-      text-shadow: 0 1px 2px rgb(0 0 0 / 40%);
-      flex: 1;
-      color: rgb(255 255 255 / 90%);
-    }
-
-    .close-button {
-      background: none;
-      border: none;
-      color: rgb(255 255 255 / 60%);
-      cursor: pointer;
-      padding: 4px;
-      margin: -4px -4px 0 8px;
-      font-size: 20px;
-      line-height: 1;
-      border-radius: 4px;
-      transition: color 0.2s, background 0.2s;
-    }
-
-    .close-button:hover {
-      color: #fff;
-      background: rgb(255 255 255 / 10%);
-    }
-
-    .choices {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    button.choice {
-      min-height: 44px;
-      padding: 8px 16px;
-      border: 1px solid rgb(255 255 255 / 20%);
-      border-radius: 8px;
-      background: rgb(255 255 255 / 8%);
-      color: inherit;
-      font: inherit;
-      font-weight: 500;
-      text-align: left;
-      line-height: 1.4;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    button.choice:hover {
-      background: rgb(255 255 255 / 18%);
-      border-color: rgb(255 255 255 / 40%);
-      transform: translateY(-1px);
-    }
-
-    button.choice:active {
-      transform: translateY(0);
-    }
-
-    button:focus-visible {
-      outline: 2px solid #f8fafc;
-      outline-offset: 2px;
-    }
-  `;
-
-  private declare state: DialogState;
+  static override styles = modelDialogStyles;
+  private dialogState: ModelDialogState = { visible: false };
   private closeTimer: number | undefined;
-  private choiceHandler: ((choice: Choice) => void) | undefined;
 
   get isVisible(): boolean {
-    return this.state.visible;
-  }
-
-  constructor() {
-    super();
-    this.state = { visible: false };
-  }
-
-  showMotion(
-    motion: MotionItem,
-    onChoice: (choice: Choice) => void,
-  ): void {
-    if (motion.Choices) {
-      this.showChoices(motion.Text ?? '', motion.Choices, onChoice);
-      return;
-    }
-
-    if (motion.Text) {
-      this.showText(motion.Text);
-    }
+    return this.dialogState.visible;
   }
 
   hide(): void {
     window.clearTimeout(this.closeTimer);
     this.closeTimer = undefined;
-    this.choiceHandler = undefined;
-    this.state = { visible: false };
+    this.dialogState = { visible: false };
     this.requestUpdate();
   }
 
   protected override render(): unknown {
-    if (!this.state.visible) {
+    if (!this.dialogState.visible) {
       return null;
     }
 
-    const hasChoices = this.state.choices.length > 0;
+    const hasChoices = this.dialogState.choices.length > 0;
 
     return html`
-      ${hasChoices ? html`<div class="overlay" @click=${() => this.hide()}></div>` : null}
+      ${hasChoices
+        ? html`<div class="overlay" @click=${() => this.hide()}></div>`
+        : null}
       <section class="dialog" @click=${(e: Event) => e.stopPropagation()}>
         <div class="header">
-          ${this.state.text ? html`<p class="text">${this.state.text}</p>` : html`<div class="text"></div>`}
-          <button class="close-button" @click=${() => this.hide()} aria-label="关闭">
+          ${this.dialogState.text
+            ? html`<p class="text">${this.dialogState.text}</p>`
+            : html`<div class="text"></div>`}
+          <button
+            class="close-button"
+            @click=${() => this.hide()}
+            aria-label="关闭"
+          >
             &times;
           </button>
         </div>
         ${hasChoices
           ? html`
               <div class="choices">
-                ${this.state.choices.map(
+                ${this.dialogState.choices.map(
                   (choice) => html`
-                    <button class="choice" @click=${() => this.selectChoice(choice)}>
-                      ${choice.Text}
+                    <button
+                      class="choice"
+                      @click=${() => this.selectChoice(choice)}
+                    >
+                      ${choice.label}
                     </button>
                   `,
                 )}
@@ -199,7 +107,7 @@ export class ModelDialogElement extends LitElement {
     `;
   }
 
-  private showText(text: string): void {
+  showText(text: string): void {
     this.setDialog({ visible: true, text, choices: [] });
     this.closeTimer = window.setTimeout(
       () => this.hide(),
@@ -207,28 +115,26 @@ export class ModelDialogElement extends LitElement {
     );
   }
 
-  private showChoices(
+  showChoices(
     text: string,
-    choices: Choice[],
-    onChoice: (choice: Choice) => void,
+    choices: DialogChoice[],
   ): void {
-    this.choiceHandler = onChoice;
     this.setDialog({ visible: true, text, choices });
     this.closeTimer = window.setTimeout(() => this.hide(), CHOICES_DURATION_MS);
   }
 
-  private setDialog(state: DialogState): void {
+  private setDialog(state: ModelDialogState): void {
     window.clearTimeout(this.closeTimer);
     this.closeTimer = undefined;
-    this.state = state;
+    this.dialogState = state;
     this.requestUpdate();
   }
 
-  private selectChoice(choice: Choice): void {
-    const choiceHandler = this.choiceHandler;
+  private selectChoice(choice: DialogChoice): void {
+    const onSelect = choice.onSelect;
 
     this.hide();
-    choiceHandler?.(choice);
+    onSelect();
   }
 }
 
@@ -240,7 +146,13 @@ export function createModelDialog(root: HTMLElement): ModelDialogElement {
 }
 
 function getTextDurationMs(text: string): number {
-  return TEXT_BASE_DURATION_MS + Array.from(text).length * TEXT_PER_CHARACTER_MS;
+  const duration =
+    TEXT_BASE_DURATION_MS + estimateUnits(text) * TEXT_PER_UNIT_MS;
+
+  return Math.min(
+    Math.max(duration, TEXT_MIN_DURATION_MS),
+    TEXT_MAX_DURATION_MS,
+  );
 }
 
 customElements.define('model-dialog', ModelDialogElement);
