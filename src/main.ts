@@ -1,3 +1,5 @@
+import './style.css';
+
 import { createApplication, updateStageHitArea } from './live2d/app';
 import { fitModel, loadModel } from './live2d/model';
 import { loadModelSettings } from './live2d/modelSettings';
