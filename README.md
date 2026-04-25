@@ -1,4 +1,41 @@
-学习目标: https://live2d.pavostudio.com/doc/zh-cn/exstudio/live2d-editor/#_1
+`README.md`
+
+# azur-lane-live2d-display
+
+## 学习目标
+
+参考 Live2D 官方编辑器执行流程：
+
+https://live2d.pavostudio.com/doc/zh-cn/exstudio/live2d-editor/#_1
+
+原图：
+
+https://live2d.pavostudio.com/doc/zh-cn/exstudio/images/le-3-01.png
+
+## Live2D 执行流程（中文）
+
+```mermaid
+flowchart TD
+  A([模型更新]) --> B[恢复已保存的参数 / 部件透明度]
+  B --> C[播放 motion3.json]
+  C --> D[控制器：区域触发]
+  D --> E[执行命令：设置参数 / 设置部件]
+  E --> F[保存参数 / 部件透明度]
+  F --> G[应用 pose3.json]
+  G --> H[控制器：眨眼 / 口型同步 / 鼠标跟随 / 额外动作 / 自动呼吸 / 加速度计 / 参数循环]
+  H --> I[播放 exp3.json]
+  I --> J[面部 / 手部追踪]
+  J --> K[控制器：手势触发]
+  K --> L[执行命令：参数锁定 / 部件锁定]
+  L --> M[控制器：麦克风 / 参数命中（低优先级）]
+  M --> N[应用 physics3.json]
+  N --> O([模型渲染])
+  O --> P[控制器：参数命中（高优先级）/ 部件透明度 / 参数值 / 参数触发]
+  P --> Q([等待下一帧])
+  Q -. 下一帧 .-> A
+```
+
+## Live2D Execution Flow (English)
 
 ```mermaid
 flowchart TD
@@ -19,63 +56,4 @@ flowchart TD
   O --> P[Controller: Param Hit High Priority / Part Opacity / Param Value / Param Trigger]
   P --> Q([Wait for next frame])
   Q -. next frame .-> A
-```
-
-我的项目:
-
-```mermaid
-flowchart TD
-  subgraph App["Vite + TypeScript App"]
-    A[main.ts]
-    B[Lit Web Component]
-  end
-
-  subgraph Render["pixi.js v8"]
-    C[PIXI.Application]
-    D[Stage / Ticker]
-    E[WebGL / Canvas Renderer]
-  end
-
-  subgraph Engine["untitled-pixi-live2d-engine"]
-    F[Live2D Model Loader]
-    G[Model Instance]
-    H[Motion Controller]
-    I[Expression Controller]
-    J[Physics / Pose Update]
-    K[Parameter / Part State]
-  end
-
-  subgraph Assets["Live2D Assets"]
-    L[model3.json]
-    M[moc3]
-    N[textures]
-    O[motion3.json]
-    P[exp3.json]
-    Q[physics3.json / pose3.json]
-  end
-
-  A --> B
-  B --> C
-  C --> D
-  D --> E
-
-  B --> F
-  F --> L
-  L --> M
-  L --> N
-  L --> O
-  L --> P
-  L --> Q
-
-  F --> G
-  G --> K
-  D --> H
-  D --> I
-  D --> J
-
-  H --> K
-  I --> K
-  J --> K
-  K --> G
-  G --> D
 ```
