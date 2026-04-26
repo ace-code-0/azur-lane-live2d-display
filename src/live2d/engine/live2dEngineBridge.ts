@@ -1,10 +1,9 @@
 import { encodeAssetName } from '@/utils/assetEncoding';
-import type { Cubism4Model } from '@/live2d/model';
+
 import type {
   FileReferences,
   MotionItem,
   Settings,
-  VarFloats,
 } from '@/live2d/settings/modelSettings.types';
 
 export {
@@ -13,83 +12,58 @@ export {
   MotionPriority,
 } from 'untitled-pixi-live2d-engine/cubism';
 
-export type ModelSettingsBridge = {
-  applyInitialSettings(): void;
-  applyMotionCommand(motion: MotionItem): void;
-  applyMotionPostCommand(motion: MotionItem): void;
-  prepareMotionPlayback(
-    group: string,
-    index: number,
-    motion: MotionItem,
-  ): Promise<void>;
-};
-
 export type EngineModelSettings = Settings & {
   url: string;
-  Groups: {
-    Target: 'Parameter';
-    Name: 'EyeBlink' | 'LipSync';
-    Ids: string[];
-  }[];
+  Groups: EngineParameterGroup[];
 };
 
-type BridgeCallbacks = {
-  startReferencedMotion(
-    reference: string,
-    source?: {
-      phase: 'command' | 'post-command';
-      owner?: string;
-    },
-  ): void;
-  onCommand?: (
-    namespace: string,
-    action: string,
-    target?: string,
-    value?: string,
-    source?: {
-      phase: 'command' | 'post-command';
-      owner?: string;
-      statement: string;
-    },
-  ) => void;
+type EngineParameterGroup = {
+  Target: 'Parameter';
+  Name: 'EyeBlink' | 'LipSync';
+  Ids: string[];
 };
 
-type CoreModelAdapter = {
-  setParamFloat?: (id: string, value: number, weight?: number) => unknown;
-  setPartsOpacity?: (id: string, value: number) => unknown;
-  setParameterValueById?: (id: unknown, value: number, weight?: number) => void;
-  setPartOpacityById?: (id: unknown, value: number) => void;
-};
-
-type InternalModelAdapter = {
-  coreModel?: CoreModelAdapter;
-  idManager?: {
-    getId(id: string): unknown;
+export type EngineModel = {
+  automator?: {
+    autoFocus?: boolean;
   };
-  motionManager?: {
-    loadMotion?: (
-      group: string,
-      index: number,
-    ) => Promise<MotionPlaybackAdapter | undefined>;
+  internalModel?: {
+    coreModel?: {
+      setParameterValueById?: (
+        id: unknown,
+        value: number,
+        weight?: number,
+      ) => void;
+      setPartOpacityById?: (id: unknown, value: number) => void;
+      setParamFloat?: (id: string, value: number, weight?: number) => unknown;
+      setPartsOpacity?: (id: string, value: number) => unknown;
+    };
+    idManager?: {
+      getId(id: string): unknown;
+    };
+    motionManager?: {
+      loadMotion?: (
+        group: string,
+        index: number,
+      ) => Promise<{ setLoop?: (loop: boolean) => void } | undefined>;
+    };
   };
-  on(event: 'beforeModelUpdate', listener: () => void): void;
 };
 
-type AutomatorAdapter = {
-  autoFocus?: boolean;
-};
-
-type MotionPlaybackAdapter = {
-  setLoop?: (loop: boolean) => void;
-};
-
-type PersistedCommandState = {
-  mouseTrackingEnabled?: boolean;
-  parameterLocks: Record<string, number>;
-  parameterValues: Record<string, number>;
-};
-
-const COMMAND_STATE_STORAGE_KEY = 'live2d.commandState';
+export function createEngineModelSettings(
+  settings: Settings,
+  modelUrl: string,
+): EngineModelSettings {
+  return {
+    ...settings,
+    url: modelUrl,
+    FileReferences: createEngineFileReferences(settings.FileReferences),
+    Groups: [
+      createParameterGroup('EyeBlink', settings.Controllers.EyeBlink.Items),
+      createParameterGroup('LipSync', settings.Controllers.LipSync.Items),
+    ],
+  };
+}
 
 export function getModelMotions(
   settings: Settings,
@@ -98,78 +72,97 @@ export function getModelMotions(
   const motions = settings.FileReferences.Motions as Partial<
     Record<string, MotionItem[]>
   >;
-  const groupMotions = motions[group];
-
-  if (!groupMotions) {
-    throw new Error(`Motion group not found in model settings: ${group}`);
-  }
-
-  return groupMotions;
-}
-
-export function createEngineModelSettings(
-  settings: Settings,
-  modelUrl: string,
-): EngineModelSettings {
-  return {
-    ...settings,
-    FileReferences: createEngineFileReferences(settings),
-    url: modelUrl,
-    Groups: [
-      {
-        Target: 'Parameter',
-        Name: 'EyeBlink',
-        Ids: settings.Controllers.EyeBlink.Items.map(({ Id }) => Id),
-      },
-      {
-        Target: 'Parameter',
-        Name: 'LipSync',
-        Ids: settings.Controllers.LipSync.Items.map(({ Id }) => Id),
-      },
-    ],
-  };
+  return motions[group] ?? [];
 }
 
 export function isExecutableModelMotion(motion: MotionItem): boolean {
   return (
-    isEnabledModelMotion(motion) &&
+    motion.Enabled !== false &&
     (motion.File !== undefined ||
       motion.Command !== undefined ||
       motion.PostCommand !== undefined ||
       motion.MotionDuration !== undefined ||
-      (motion.VarFloats?.some(isVariableAssignment) ?? false))
+      motion.VarFloats?.some((variable) => variable.Type === 2))
   );
 }
 
-export function isEnabledModelMotion(motion: MotionItem): boolean {
-  return motion.Enabled !== false;
+export function setMouseTrackingEnabled(
+  model: EngineModel,
+  enabled: boolean,
+): void {
+  if (model.automator) {
+    model.automator.autoFocus = enabled;
+  }
 }
 
-function isVariableAssignment(variable: VarFloats): boolean {
-  return variable.Type === 2;
+export function setModelParameter(
+  model: EngineModel,
+  id: string,
+  value: number,
+  weight?: number,
+): void {
+  const coreModel = model.internalModel?.coreModel;
+
+  if (coreModel?.setParameterValueById) {
+    coreModel.setParameterValueById(getEngineId(model, id), value, weight);
+    return;
+  }
+
+  coreModel?.setParamFloat?.(id, value, weight);
 }
 
-function createEngineFileReferences(settings: Settings): FileReferences {
-  const { FileReferences } = settings;
+export function setPartOpacity(
+  model: EngineModel,
+  id: string,
+  value: number,
+): void {
+  const coreModel = model.internalModel?.coreModel;
 
+  if (coreModel?.setPartOpacityById) {
+    coreModel.setPartOpacityById(getEngineId(model, id), value);
+    return;
+  }
+
+  coreModel?.setPartsOpacity?.(id, value);
+}
+
+export async function preloadMotion(
+  model: EngineModel,
+  group: string,
+  index: number,
+  options: { loop?: boolean } = {},
+): Promise<void> {
+  const motion = await model.internalModel?.motionManager?.loadMotion?.(
+    group,
+    index,
+  );
+
+  if (options.loop) {
+    motion?.setLoop?.(true);
+  }
+}
+
+function createEngineFileReferences(
+  references: FileReferences,
+): FileReferences {
   return {
-    ...FileReferences,
-    Moc: encodeModelFilePath(FileReferences.Moc),
-    Textures: FileReferences.Textures.map(encodeModelFilePath),
-    Physics: encodeModelFilePath(FileReferences.Physics),
+    ...references,
+    Moc: encodeModelAssetPath(references.Moc),
+    Textures: references.Textures.map(encodeModelAssetPath),
+    Physics: encodeModelAssetPath(references.Physics),
     PhysicsV2: {
-      ...FileReferences.PhysicsV2,
-      File: encodeModelFilePath(FileReferences.PhysicsV2.File),
+      ...references.PhysicsV2,
+      File: encodeModelAssetPath(references.PhysicsV2.File),
     },
     Motions: Object.fromEntries(
-      Object.entries(FileReferences.Motions).map(([group, motions]) => [
+      Object.entries(references.Motions).map(([group, motions]) => [
         group,
         motions.map((motion) => ({
           ...motion,
           File:
             motion.File === undefined
               ? undefined
-              : encodeModelFilePath(motion.File),
+              : encodeModelAssetPath(motion.File),
           Sound: undefined,
         })),
       ]),
@@ -177,288 +170,21 @@ function createEngineFileReferences(settings: Settings): FileReferences {
   };
 }
 
-function encodeModelFilePath(path: string): string {
+function createParameterGroup(
+  name: 'EyeBlink' | 'LipSync',
+  items: { Id: string }[],
+): EngineParameterGroup {
+  return {
+    Target: 'Parameter',
+    Name: name,
+    Ids: items.map(({ Id }) => Id),
+  };
+}
+
+function encodeModelAssetPath(path: string): string {
   return path.split('/').map(encodeAssetName).join('/');
 }
 
-export function createModelSettingsBridge(
-  model: Cubism4Model,
-  settings: Settings,
-  callbacks: BridgeCallbacks,
-): ModelSettingsBridge {
-  const parameterLocks = new Map<string, number>();
-  const parameterValues = new Map<string, number>();
-  const persistedCommandState = restoreCommandState();
-
-  const internalModel = getInternalModel(model);
-  internalModel.on('beforeModelUpdate', () => {
-    for (const [id, value] of parameterLocks) {
-      setModelParameter(model, id, value);
-    }
-  });
-
-  function applyCommand(
-    command: string | undefined,
-    source: {
-      phase: 'command' | 'post-command';
-      owner?: string;
-    },
-  ): void {
-    for (const statement of splitCommand(command)) {
-      const [namespace, action, target, rawValue] = statement.split(/\s+/, 4);
-
-      callbacks.onCommand?.(namespace, action, target, rawValue, {
-        ...source,
-        statement,
-      });
-
-      if (namespace === 'mouse_tracking') {
-        const enabled = action === 'enable';
-        setMouseTrackingEnabled(model, enabled);
-        persistedCommandState.mouseTrackingEnabled = enabled;
-        persistCommandState();
-        continue;
-      }
-
-      if (namespace === 'parameters') {
-        applyParameterCommand(action, target, rawValue);
-        continue;
-      }
-
-      if (namespace === 'start_mtn') {
-        callbacks.startReferencedMotion(action, source);
-        continue;
-      }
-
-      throw new Error(`Unsupported model command: ${statement}`);
-    }
-  }
-
-  function applyParameterCommand(
-    action: string | undefined,
-    target: string | undefined,
-    rawValue: string | undefined,
-  ): void {
-    if (!target) {
-      throw new Error(`Missing parameter target for command: ${action}`);
-    }
-
-    if (action === 'unlock') {
-      parameterLocks.delete(target);
-      delete persistedCommandState.parameterLocks[target];
-      persistCommandState();
-      return;
-    }
-
-    const value = Number(rawValue);
-
-    if (!Number.isFinite(value)) {
-      throw new Error(`Invalid parameter value for ${target}: ${rawValue}`);
-    }
-
-    if (action === 'lock') {
-      parameterLocks.set(target, value);
-      persistedCommandState.parameterLocks[target] = value;
-      setModelParameter(model, target, value);
-      persistCommandState();
-      return;
-    }
-
-    if (action === 'set') {
-      parameterValues.set(target, value);
-      persistedCommandState.parameterValues[target] = value;
-      setModelParameter(model, target, value);
-      persistCommandState();
-      return;
-    }
-
-    throw new Error(`Unsupported parameter command: ${action}`);
-  }
-
-  return {
-    applyInitialSettings(): void {
-      setMouseTrackingEnabled(
-        model,
-        persistedCommandState.mouseTrackingEnabled ??
-          settings.Controllers.MouseTracking.Enabled,
-      );
-
-      for (const [id, value] of Object.entries(
-        persistedCommandState.parameterValues,
-      )) {
-        parameterValues.set(id, value);
-        setModelParameter(model, id, value);
-      }
-
-      for (const [id, value] of Object.entries(
-        persistedCommandState.parameterLocks,
-      )) {
-        parameterLocks.set(id, value);
-        setModelParameter(model, id, value);
-      }
-
-      applyPartOpacitySettings(model, settings);
-    },
-
-    applyMotionCommand(motion: MotionItem): void {
-      applyCommand(motion.Command, {
-        phase: 'command',
-        owner: motion.Name,
-      });
-    },
-
-    applyMotionPostCommand(motion: MotionItem): void {
-      applyCommand(motion.PostCommand, {
-        phase: 'post-command',
-        owner: motion.Name,
-      });
-    },
-
-    async prepareMotionPlayback(
-      group: string,
-      index: number,
-      motion: MotionItem,
-    ): Promise<void> {
-      const loadedMotion = await internalModel.motionManager
-        ?.loadMotion?.(group, index)
-        .catch(() => undefined);
-
-      if (motion.FileLoop) {
-        loadedMotion?.setLoop?.(true);
-      }
-    },
-  };
-
-  function persistCommandState(): void {
-    try {
-      window.localStorage.setItem(
-        COMMAND_STATE_STORAGE_KEY,
-        JSON.stringify({
-          mouseTrackingEnabled: persistedCommandState.mouseTrackingEnabled,
-          parameterLocks: Object.fromEntries(parameterLocks),
-          parameterValues: Object.fromEntries(parameterValues),
-        } satisfies PersistedCommandState),
-      );
-    } catch (error) {
-      console.warn('[live2d-motion] failed to persist command state', error);
-    }
-  }
-
-  function restoreCommandState(): PersistedCommandState {
-    try {
-      const stored = window.localStorage.getItem(COMMAND_STATE_STORAGE_KEY);
-
-      if (!stored) {
-        return { parameterLocks: {}, parameterValues: {} };
-      }
-
-      const parsed = JSON.parse(stored) as Partial<PersistedCommandState>;
-
-      return {
-        mouseTrackingEnabled:
-          typeof parsed.mouseTrackingEnabled === 'boolean'
-            ? parsed.mouseTrackingEnabled
-            : undefined,
-        parameterLocks: coerceNumberRecord(parsed.parameterLocks),
-        parameterValues: coerceNumberRecord(parsed.parameterValues),
-      };
-    } catch (error) {
-      console.warn('[live2d-motion] failed to restore command state', error);
-
-      return { parameterLocks: {}, parameterValues: {} };
-    }
-  }
-}
-
-export function setMouseTrackingEnabled(
-  model: Cubism4Model,
-  enabled: boolean,
-): void {
-  (model.automator as AutomatorAdapter).autoFocus = enabled;
-}
-
-function applyPartOpacitySettings(
-  model: Cubism4Model,
-  settings: Settings,
-): void {
-  if (!settings.Controllers.PartOpacity.Enabled) {
-    return;
-  }
-
-  for (const item of settings.Controllers.PartOpacity.Items) {
-    for (const id of item.Ids) {
-      setPartOpacity(model, id, item.Value);
-    }
-  }
-}
-
-function splitCommand(command: string | undefined): string[] {
-  return (
-    command
-      ?.split(';')
-      .map((statement) => statement.trim())
-      .filter((statement) => statement.length > 0) ?? []
-  );
-}
-
-function coerceNumberRecord(value: unknown): Record<string, number> {
-  if (!value || typeof value !== 'object') {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([key, entryValue]) =>
-      typeof entryValue === 'number' ? [[key, entryValue]] : [],
-    ),
-  );
-}
-
-export function setModelParameter(
-  model: Cubism4Model,
-  id: string,
-  value: number,
-): void {
-  const { coreModel } = getInternalModel(model);
-
-  if (coreModel?.setParameterValueById) {
-    coreModel.setParameterValueById(getEngineId(model, id), value);
-    return;
-  }
-
-  if (coreModel?.setParamFloat) {
-    coreModel.setParamFloat(id, value);
-    return;
-  }
-
-  throw new Error(`Live2D core model cannot set parameter: ${id}`);
-}
-
-function setPartOpacity(model: Cubism4Model, id: string, value: number): void {
-  const { coreModel } = getInternalModel(model);
-
-  if (coreModel?.setPartOpacityById) {
-    coreModel.setPartOpacityById(getEngineId(model, id), value);
-    return;
-  }
-
-  if (coreModel?.setPartsOpacity) {
-    coreModel.setPartsOpacity(id, value);
-    return;
-  }
-
-  throw new Error(`Live2D core model cannot set part opacity: ${id}`);
-}
-
-function getEngineId(model: Cubism4Model, id: string): unknown {
-  return getInternalModel(model).idManager?.getId(id) ?? id;
-}
-
-function getInternalModel(model: Cubism4Model): InternalModelAdapter {
-  const internalModel = model.internalModel as InternalModelAdapter | undefined;
-
-  if (!internalModel) {
-    throw new Error('Live2D internal model is not ready');
-  }
-
-  return internalModel;
+function getEngineId(model: EngineModel, id: string): unknown {
+  return model.internalModel?.idManager?.getId(id) ?? id;
 }
