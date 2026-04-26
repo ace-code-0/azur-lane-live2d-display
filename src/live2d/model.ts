@@ -29,7 +29,6 @@ export async function loadModel(
     {
       ticker: app.ticker,
       autoFocus: modelSettings.Controllers.MouseTracking.Enabled,
-      autoHitTest: true,
       lipSyncGain: modelSettings.Controllers.LipSync.Gain,
       idleMotionGroup: '__DISABLED__',
       motionPreload: MotionPreloadStrategy.ALL,
@@ -38,8 +37,6 @@ export async function loadModel(
 
   model.eventMode = 'dynamic';
   model.cursor = 'pointer';
-  model.visible = true;
-  model.alpha = 1;
 
   return model;
 }
