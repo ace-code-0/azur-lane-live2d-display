@@ -8,7 +8,7 @@ import { installTouchDragInteractions } from '@/live2d/interactions/touchDragInt
 import { installTouchInteractions } from '@/live2d/interactions/touchInteractions';
 import { createMotionController } from '@/live2d/motion/motionController';
 import { loadModelSettings } from '@/live2d/settings/modelSettings';
-import { dialogController } from '@/ui/dialog';
+import { initializeModelVarFloats } from '@/live2d/runtime/modelVariables';
 
 const MODEL_URL = '/model/model0.json';
 const DEBUG_TOUCH = true;
@@ -20,12 +20,12 @@ async function bootstrap(): Promise<void> {
   }
   const app = await createApplication(root);
   const modelSettings = await loadModelSettings(MODEL_URL);
+  initializeModelVarFloats(modelSettings);
   const model = await loadModel(app, MODEL_URL, modelSettings);
   const touchActions = createTouchActions(modelSettings);
   const motionController = createMotionController(
     model,
     modelSettings,
-    dialogController,
     DEBUG_TOUCH,
   );
 
