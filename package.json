@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "lit": "^3.3.2",
+    "loglevel": "^1.9.2",
     "pixi.js": "^8.18.1",
     "untitled-pixi-live2d-engine": "^1.0.2"
   }
