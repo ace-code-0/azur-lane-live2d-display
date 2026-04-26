@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vite';
-import { createModelAssetAliasPath } from './src/live2d/settings/modelAssetPath';
+import { createEscapedPath } from './src/utils/pathSegmentEscape';
 
 const modelDir = path.resolve('public/model');
 
@@ -18,7 +18,7 @@ const getModelAliases = () => {
       else {
         const rel = path.relative(modelDir, fullPath).replace(/\\/g, '/');
         // 将编码后的路径映射回原始文件
-        aliases.set(`/model/${createModelAssetAliasPath(rel)}`, fullPath);
+        aliases.set(`/model/${createEscapedPath(rel)}`, fullPath);
       }
     }
   };
