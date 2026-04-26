@@ -1,21 +1,29 @@
-import {
-  createEngineModelSettings,
-  Live2DModel,
-  MotionPreloadStrategy,
-} from '@/live2d/engine/live2dEngineBridge';
-
 import type { PixiApplication } from '@/live2d/app';
 import type { Options, Settings } from '@/live2d/settings/modelSettings.types';
+import {
+  configureCubismSDK,
+  Live2DModel,
+  MotionPreloadStrategy,
+} from 'untitled-pixi-live2d-engine';
+import log from '@/utils/logger';
 
-export type Cubism4Model = Live2DModel;
-
-let hasLoggedModelFit = false;
+function createEngineModelSettings(
+  modelSettings: Settings,
+  modelUrl: string,
+): Settings & { url: string } {
+  return {
+    ...modelSettings,
+    url: modelUrl,
+  };
+}
 
 export async function loadModel(
   app: PixiApplication,
   modelUrl: string,
   modelSettings: Settings,
-): Promise<Cubism4Model> {
+): Promise<Live2DModel> {
+  configureCubismSDK();
+
   const model = await Live2DModel.from(
     createEngineModelSettings(modelSettings, modelUrl),
     {
@@ -28,17 +36,17 @@ export async function loadModel(
     },
   );
 
-  // 显式启用交互
   model.eventMode = 'dynamic';
   model.cursor = 'pointer';
   model.visible = true;
   model.alpha = 1;
+
   return model;
 }
 
 export function fitModel(
   app: PixiApplication,
-  model: Cubism4Model,
+  model: Live2DModel,
   options: Options,
 ): void {
   model.anchor.set(0.5, 0.8);
@@ -48,19 +56,16 @@ export function fitModel(
   );
   model.scale.set(options.ScaleFactor);
 
-  if (!hasLoggedModelFit) {
-    hasLoggedModelFit = true;
-    console.info('[live2d-model] fitted', {
-      screen: {
-        width: app.screen.width,
-        height: app.screen.height,
-      },
-      position: {
-        x: Math.round(model.position.x),
-        y: Math.round(model.position.y),
-      },
-      scale: options.ScaleFactor,
-      bounds: model.getBounds(),
-    });
-  }
+  log.debug('[live2d-model] fitted', {
+    screen: {
+      width: app.screen.width,
+      height: app.screen.height,
+    },
+    position: {
+      x: Math.round(model.position.x),
+      y: Math.round(model.position.y),
+    },
+    scale: options.ScaleFactor,
+    bounds: model.getBounds(),
+  });
 }
