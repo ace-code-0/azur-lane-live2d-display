@@ -8,7 +8,7 @@ import { installTouchDragInteractions } from '@/live2d/interactions/touchDragInt
 import { installTouchInteractions } from '@/live2d/interactions/touchInteractions';
 import { createMotionController } from '@/live2d/motion/motionController';
 import { loadModelSettings } from '@/live2d/settings/modelSettings';
-import { createModelDialog } from '@/ui/dialog/dialog';
+import { dialogController } from '@/ui/dialog';
 
 const MODEL_URL = '/model/model0.json';
 const DEBUG_TOUCH = true;
@@ -19,14 +19,13 @@ async function bootstrap(): Promise<void> {
     throw new Error('#app not found');
   }
   const app = await createApplication(root);
-  const modelDialog = createModelDialog(document.body);
   const modelSettings = await loadModelSettings(MODEL_URL);
   const model = await loadModel(app, MODEL_URL, modelSettings);
   const touchActions = createTouchActions(modelSettings);
   const motionController = createMotionController(
     model,
     modelSettings,
-    modelDialog,
+    dialogController,
     DEBUG_TOUCH,
   );
 

@@ -10,9 +10,9 @@ import { createMotionReference } from './motionReference';
 import { MotionVariableStore, getTimestamp } from './motionVariables';
 
 import type { Cubism4Model } from '@/live2d/model';
-import type { DialogElement } from '@/ui/dialog/dialog';
 import type { MotionItem, Settings } from '@/live2d/settings/modelSettings.types';
 import type { TouchAction } from '@/live2d/interactions/touchActions';
+import type { dialogController } from '@/ui/dialog';
 import type { SelectedMotion } from './motionSelection';
 
 const IDLE_MOTION_PREFIX = 'Idle';
@@ -66,7 +66,6 @@ export type MotionController = {
 export function createMotionController(
   model: Cubism4Model,
   modelSettings: Settings,
-  modelDialog: DialogElement,
   debugTouch: boolean,
 ): MotionController {
   const motionManager = model.internalModel?.motionManager;
@@ -752,10 +751,10 @@ export function createMotionController(
       return;
     }
 
-    modelDialog.hide();
+    dialogController.hide();
 
     if (motion.Choices && motion.Choices.length > 0) {
-      modelDialog.showChoices(
+      dialogController.showChoices(
         motion.Text ?? '',
         motion.Choices.map((choice) => ({
           label: choice.Text,
@@ -766,7 +765,7 @@ export function createMotionController(
     }
 
     if (motion.Text) {
-      modelDialog.showText(motion.Text);
+      dialogController.showText(motion.Text);
     }
   }
 

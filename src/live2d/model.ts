@@ -23,14 +23,10 @@ export async function loadModel(
       autoFocus: modelSettings.Controllers.MouseTracking.Enabled,
       autoHitTest: true,
       lipSyncGain: modelSettings.Controllers.LipSync.Gain,
-      idleMotionGroup: '__DISABLED__', // 使用非空字符串避开 options.idleMotionGroup || 'Idle' 的回退逻辑
+      idleMotionGroup: '__DISABLED__',
       motionPreload: MotionPreloadStrategy.ALL,
     },
   );
-  // xy偏移
-  // model.position.set(10, -100);
-  // 左上起点
-  // model.pivot.set(100, 1);
 
   // 显式启用交互
   model.eventMode = 'dynamic';
