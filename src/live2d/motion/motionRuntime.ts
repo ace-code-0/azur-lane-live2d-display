@@ -11,7 +11,7 @@ import {
 import { executeModelCommands } from '@/live2d/runtime/modelCommands';
 import type { ModelVariableStore } from '@/live2d/runtime/modelVariables';
 import type { Settings } from '@/live2d/settings/modelSettings.types';
-import type { Live2DModel } from 'untitled-pixi-live2d-engine';
+import type { Live2DModel } from 'untitled-pixi-live2d-engine/cubism';
 
 type EngineModel = Live2DModel & {
   automator?: {

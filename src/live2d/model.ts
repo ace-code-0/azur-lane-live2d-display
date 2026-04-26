@@ -4,16 +4,42 @@ import {
   configureCubismSDK,
   Live2DModel,
   MotionPreloadStrategy,
-} from 'untitled-pixi-live2d-engine';
+} from 'untitled-pixi-live2d-engine/cubism';
 import log from '@/utils/logger';
+
+type EngineModelSettings = Settings & {
+  url: string;
+  Groups: EngineParameterGroup[];
+};
+
+type EngineParameterGroup = {
+  Target: 'Parameter';
+  Name: 'EyeBlink' | 'LipSync';
+  Ids: string[];
+};
 
 function createEngineModelSettings(
   modelSettings: Settings,
   modelUrl: string,
-): Settings & { url: string } {
+): EngineModelSettings {
   return {
     ...modelSettings,
     url: modelUrl,
+    Groups: [
+      createParameterGroup('EyeBlink', modelSettings.Controllers.EyeBlink.Items),
+      createParameterGroup('LipSync', modelSettings.Controllers.LipSync.Items),
+    ],
+  };
+}
+
+function createParameterGroup(
+  name: 'EyeBlink' | 'LipSync',
+  items: { Id: string }[],
+): EngineParameterGroup {
+  return {
+    Target: 'Parameter',
+    Name: name,
+    Ids: items.map(({ Id }) => Id),
   };
 }
 
