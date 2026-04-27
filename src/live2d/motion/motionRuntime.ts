@@ -20,14 +20,18 @@ type EngineModel = Live2DModel & {
   internalModel?: {
     coreModel?: {
       setParameterValueById?: (
-        id: unknown,
+        engineParameterId: unknown,
         value: number,
         weight?: number,
       ) => void;
-      setParamFloat?: (id: string, value: number, weight?: number) => unknown;
+      setParamFloat?: (
+        parameterId: string,
+        value: number,
+        weight?: number,
+      ) => unknown;
     };
     idManager?: {
-      getId(id: string): unknown;
+      getId(parameterId: string): unknown;
     };
     motionManager?: {
       on?: (event: 'motionFinish', listener: () => void) => void;
@@ -82,8 +86,8 @@ export class MotionRuntime {
   }
 
   applyLockedParameters(): void {
-    for (const [id, value] of this.lockedParameters) {
-      this.setModelParameter(id, value);
+    for (const [parameterId, value] of this.lockedParameters) {
+      this.setModelParameter(parameterId, value);
     }
   }
 
@@ -149,13 +153,14 @@ export class MotionRuntime {
           this.model.automator.autoFocus = enabled;
         }
       },
-      setParameter: (id, value) => this.setModelParameter(id, value),
-      lockParameter: (id, value = 0) => {
-        this.lockedParameters.set(id, value);
-        this.setModelParameter(id, value);
+      setParameter: (parameterId, value) =>
+        this.setModelParameter(parameterId, value),
+      lockParameter: (parameterId, value = 0) => {
+        this.lockedParameters.set(parameterId, value);
+        this.setModelParameter(parameterId, value);
       },
-      unlockParameter: (id) => {
-        this.lockedParameters.delete(id);
+      unlockParameter: (parameterId) => {
+        this.lockedParameters.delete(parameterId);
       },
       startMotion: (reference) => {
         void this.playReferencedMotion(reference, 'NORMAL');
@@ -190,13 +195,14 @@ export class MotionRuntime {
 
   private applyMotionPostEffects(motion: PlannedMotion): void {
     executeModelCommands(motion.motion.PostCommand, {
-      setParameter: (id, value) => this.setModelParameter(id, value),
-      lockParameter: (id, value = 0) => {
-        this.lockedParameters.set(id, value);
-        this.setModelParameter(id, value);
+      setParameter: (parameterId, value) =>
+        this.setModelParameter(parameterId, value),
+      lockParameter: (parameterId, value = 0) => {
+        this.lockedParameters.set(parameterId, value);
+        this.setModelParameter(parameterId, value);
       },
-      unlockParameter: (id) => {
-        this.lockedParameters.delete(id);
+      unlockParameter: (parameterId) => {
+        this.lockedParameters.delete(parameterId);
       },
       startMotion: (reference) => {
         void this.playReferencedMotion(reference, 'NORMAL');
@@ -204,16 +210,17 @@ export class MotionRuntime {
     });
   }
 
-  private setModelParameter(id: string, value: number): void {
+  private setModelParameter(parameterId: string, value: number): void {
     const coreModel = this.model.internalModel?.coreModel;
-    const engineId = this.model.internalModel?.idManager?.getId(id) ?? id;
+    const engineId =
+      this.model.internalModel?.idManager?.getId(parameterId) ?? parameterId;
 
     if (coreModel?.setParameterValueById) {
       coreModel.setParameterValueById(engineId, value);
       return;
     }
 
-    coreModel?.setParamFloat?.(id, value);
+    coreModel?.setParamFloat?.(parameterId, value);
   }
 
   private playSound(path?: string): void {

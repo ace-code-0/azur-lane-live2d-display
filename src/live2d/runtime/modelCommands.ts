@@ -7,7 +7,7 @@ export type ModelCommand =
   | {
       kind: 'parameter';
       action: 'set' | 'lock' | 'unlock';
-      id: string;
+      parameterId: string;
       value?: number;
       raw: string;
     }
@@ -25,9 +25,9 @@ export type ModelCommand =
 
 export type ModelCommandHandlers = {
   setMouseTrackingEnabled?(enabled: boolean): void;
-  setParameter?(id: string, value: number): void;
-  lockParameter?(id: string, value?: number): void;
-  unlockParameter?(id: string): void;
+  setParameter?(parameterId: string, value: number): void;
+  lockParameter?(parameterId: string, value?: number): void;
+  unlockParameter?(parameterId: string): void;
   startMotion?(reference: string): void;
   onUnknownCommand?(command: Extract<ModelCommand, { kind: 'unknown' }>): void;
 };
@@ -65,17 +65,17 @@ export function parseModelCommand(raw: string): ModelCommand {
   }
 
   if (namespace === 'parameters') {
-    const [id, rawValue] = args;
+    const [parameterId, rawValue] = args;
     const value = rawValue === undefined ? undefined : Number(rawValue);
 
     if (
       (action === 'set' || action === 'lock' || action === 'unlock') &&
-      id !== undefined
+      parameterId !== undefined
     ) {
       return {
         kind: 'parameter',
         action,
-        id,
+        parameterId,
         value: Number.isFinite(value) ? value : undefined,
         raw,
       };
@@ -109,16 +109,16 @@ export function executeModelCommand(
 
     case 'parameter':
       if (command.action === 'set' && command.value !== undefined) {
-        handlers.setParameter?.(command.id, command.value);
+        handlers.setParameter?.(command.parameterId, command.value);
         return;
       }
 
       if (command.action === 'lock') {
-        handlers.lockParameter?.(command.id, command.value);
+        handlers.lockParameter?.(command.parameterId, command.value);
         return;
       }
 
-      handlers.unlockParameter?.(command.id);
+      handlers.unlockParameter?.(command.parameterId);
       return;
 
     case 'startMotion':
