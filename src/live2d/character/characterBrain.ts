@@ -1,5 +1,5 @@
 export type CharacterState =
-  | 'starting'
+  | 'start'
   | 'idle'
   | 'reacting'
   | 'dragging'
@@ -19,7 +19,7 @@ export function reduceCharacterState(
   event: CharacterEvent,
 ): CharacterState {
   switch (state) {
-    case 'starting':
+    case 'start':
       return event.type === 'MOTION_DONE' ? 'idle' : state;
 
     case 'idle':
