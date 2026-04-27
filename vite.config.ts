@@ -3,6 +3,8 @@ import path from 'node:path';
 import { defineConfig } from 'vite';
 import { createEscapedPath } from './src/utils/pathSegmentEscape';
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 const modelDir = path.resolve('public/model');
 
 /**
@@ -33,27 +35,25 @@ export default defineConfig({
       '@': path.resolve('src'),
     },
   },
-  plugins: [
-    {
-      name: 'model-alias-plugin',
-      // 开发服务器：拦截编码后的请求并返回原始文件内容
-      configureServer(server) {
-        const aliases = getModelAliases();
-        server.middlewares.use((req, res, next) => {
-          const filePath = aliases.get(req.url?.split('?')[0] || '');
-          if (filePath) return res.end(fs.readFileSync(filePath));
-          next();
-        });
-      },
-      // 构建：将原始文件复制到 dist 中编码后的位置
-      writeBundle(options) {
-        const aliases = getModelAliases();
-        for (const [aliasPath, sourcePath] of aliases) {
-          const dest = path.join(options.dir!, aliasPath);
-          fs.mkdirSync(path.dirname(dest), { recursive: true });
-          fs.copyFileSync(sourcePath, dest);
-        }
-      },
+  plugins: [{
+    name: 'model-alias-plugin',
+    // 开发服务器：拦截编码后的请求并返回原始文件内容
+    configureServer(server) {
+      const aliases = getModelAliases();
+      server.middlewares.use((req, res, next) => {
+        const filePath = aliases.get(req.url?.split('?')[0] || '');
+        if (filePath) return res.end(fs.readFileSync(filePath));
+        next();
+      });
     },
-  ],
+    // 构建：将原始文件复制到 dist 中编码后的位置
+    writeBundle(options) {
+      const aliases = getModelAliases();
+      for (const [aliasPath, sourcePath] of aliases) {
+        const dest = path.join(options.dir!, aliasPath);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(sourcePath, dest);
+      }
+    },
+  }, cloudflare()],
 });
