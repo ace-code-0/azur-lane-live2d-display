@@ -6,7 +6,6 @@ export type CharacterState =
   | 'leaving';
 
 export type CharacterEvent =
-  | { type: 'BOOT' }
   | { type: 'MOTION_DONE' }
   | { type: 'MOTION_REQUEST'; motion: string }
   | { type: 'TOUCH'; area: string; motion?: string }

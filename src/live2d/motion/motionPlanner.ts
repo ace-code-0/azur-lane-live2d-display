@@ -30,10 +30,6 @@ export function planMotion(
   state: CharacterState,
   event: CharacterEvent,
 ): MotionPlan {
-  if (event.type === 'BOOT') {
-    return selectSingleMotion(settings, variables, { group: 'Start' }, 'FORCE');
-  }
-
   if (state === 'idle') {
     return selectIdleMotion(settings, variables);
   }

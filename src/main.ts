@@ -7,7 +7,10 @@ import {
   type CharacterEvent,
   type CharacterState,
 } from '@/live2d/character/characterBrain';
-import { planMotion } from '@/live2d/motion/motionPlanner';
+import {
+  planMotion,
+  selectSingleMotion,
+} from '@/live2d/motion/motionPlanner';
 import { MotionRuntime } from '@/live2d/motion/motionRuntime';
 import { loadModelSettings } from '@/live2d/settings/modelSettings';
 import { createModelVariableStore } from '@/live2d/runtime/modelVariables';
@@ -68,20 +71,41 @@ async function bootstrap(): Promise<void> {
     fitModel(app, model, modelSettings.Options);
   });
 
-  dispatch({ type: 'BOOT' });
+  playStartMotion();
   resetLeaveTimer();
 
   function dispatch(event: CharacterEvent): void {
+    const previousState = state;
     state = transitionCharacterState(state, event);
     const plan = planMotion(modelSettings, modelVariables, state, event);
 
-    if (plan.kind === 'none' && isTransientState(state)) {
+    if (
+      plan.kind === 'none' &&
+      state !== previousState &&
+      isTransientState(state)
+    ) {
       state = transitionCharacterState(state, { type: 'MOTION_DONE' });
       void motionRuntime.play(
         planMotion(modelSettings, modelVariables, state, {
           type: 'MOTION_DONE',
         }),
       );
+      return;
+    }
+
+    void motionRuntime.play(plan);
+  }
+
+  function playStartMotion(): void {
+    const plan = selectSingleMotion(
+      modelSettings,
+      modelVariables,
+      { group: 'Start' },
+      'FORCE',
+    );
+
+    if (plan.kind === 'none') {
+      dispatch({ type: 'MOTION_DONE' });
       return;
     }
 

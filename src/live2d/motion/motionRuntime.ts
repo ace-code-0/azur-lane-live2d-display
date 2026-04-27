@@ -45,6 +45,7 @@ export type MotionRuntimeOptions = {
 
 export class MotionRuntime {
   private foregroundMotion: PlannedMotion | undefined;
+  private currentCommandAudio: HTMLAudioElement | undefined;
   private readonly lockedParameters = new Map<string, number>();
 
   constructor(
@@ -100,7 +101,7 @@ export class MotionRuntime {
     }
 
     if (layeredMotions.length > 0) {
-      await this.model.parallelMotion(
+      const results = await this.model.parallelMotion(
         layeredMotions.map((motion) => ({
           group: motion.group,
           index: motion.index,
@@ -108,16 +109,19 @@ export class MotionRuntime {
         })),
       );
 
-      for (const motion of layeredMotions) {
-        this.applyMotionStartEffects(motion);
+      for (let index = 0; index < layeredMotions.length; index += 1) {
+        if (results[index]) {
+          this.applyMotionStartEffects(layeredMotions[index]);
+          this.playCommandSound(layeredMotions[index].motion.Sound);
+        }
       }
     }
   }
 
   private async playMotion(motion: PlannedMotion): Promise<void> {
-    this.applyMotionStartEffects(motion);
-
     if (!motion.motion.File) {
+      this.applyMotionStartEffects(motion);
+      this.playCommandSound(motion.motion.Sound);
       this.scheduleCommandOnlyMotionFinish(motion);
       return;
     }
@@ -125,13 +129,30 @@ export class MotionRuntime {
     const layer = getMotionLayer(motion);
 
     if (layer > 0) {
-      await this.model.parallelMotion([
+      const [accepted] = await this.model.parallelMotion([
         {
           group: motion.group,
           index: motion.index,
           priority: toEnginePriority(motion.priority) as never,
         },
       ]);
+
+      if (accepted) {
+        this.applyMotionStartEffects(motion);
+        this.playCommandSound(motion.motion.Sound);
+      }
+
+      return;
+    }
+
+    const accepted = await this.model.motion(
+      motion.group,
+      motion.index,
+      toEnginePriority(motion.priority) as never,
+      this.createMotionSoundOptions(motion),
+    );
+
+    if (!accepted) {
       return;
     }
 
@@ -139,11 +160,7 @@ export class MotionRuntime {
       this.foregroundMotion = motion;
     }
 
-    await this.model.motion(
-      motion.group,
-      motion.index,
-      toEnginePriority(motion.priority) as never,
-    );
+    this.applyMotionStartEffects(motion);
   }
 
   private applyMotionStartEffects(motion: PlannedMotion): void {
@@ -167,7 +184,6 @@ export class MotionRuntime {
       },
     });
     this.variables.applyAssignments(motion.motion);
-    this.playSound(motion.motion.Sound);
   }
 
   private finishForegroundMotion(): void {
@@ -223,12 +239,26 @@ export class MotionRuntime {
     coreModel?.setParamFloat?.(parameterId, value);
   }
 
-  private playSound(path?: string): void {
+  private createMotionSoundOptions(
+    motion: PlannedMotion,
+  ): { sound?: string } | undefined {
+    return motion.motion.Sound
+      ? { sound: this.resolveSoundPath(motion.motion.Sound) }
+      : undefined;
+  }
+
+  private playCommandSound(path?: string): void {
     if (!path) {
       return;
     }
 
-    new Audio(`/model/${path}`).play().catch(() => {});
+    this.currentCommandAudio?.pause();
+    this.currentCommandAudio = new Audio(this.resolveSoundPath(path));
+    this.currentCommandAudio.play().catch(() => {});
+  }
+
+  private resolveSoundPath(path: string): string {
+    return `/model/${path}`;
   }
 }
 
