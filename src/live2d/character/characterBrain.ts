@@ -14,7 +14,7 @@ export type CharacterEvent =
   | { type: 'DRAG_END' }
   | { type: 'IDLE_TIMEOUT' };
 
-export function reduceCharacterState(
+export function transitionCharacterState(
   state: CharacterState,
   event: CharacterEvent,
 ): CharacterState {

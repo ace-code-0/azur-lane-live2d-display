@@ -12,7 +12,6 @@ export type ModelVariableStorage = Pick<
 >;
 
 export type ModelVariableStore = {
-  initialize(defaultValue?: number): void;
   entries(): Record<string, number>;
   get(name: string): number;
   set(name: string, value: number): void;
@@ -21,25 +20,15 @@ export type ModelVariableStore = {
   applyAssignments(motion: MotionItem): void;
 };
 
-export function initializeModelVarFloats(settings: Settings): void {
-  createModelVariableStore(settings).initialize(0);
-}
-
 export function createModelVariableStore(
   settings: Settings,
   storage: ModelVariableStorage = localStorage,
+  defaultValue = 0,
 ): ModelVariableStore {
   const names = collectModelVariableNames(settings);
+  seedMissingVariables(storage, names, defaultValue);
 
   return {
-    initialize(defaultValue = 0): void {
-      for (const name of names) {
-        if (storage.getItem(createStorageKey(name)) === null) {
-          storage.setItem(createStorageKey(name), String(defaultValue));
-        }
-      }
-    },
-
     entries(): Record<string, number> {
       return Object.fromEntries(names.map((name) => [name, readValue(storage, name)]));
     },
@@ -68,6 +57,18 @@ export function createModelVariableStore(
       });
     },
   };
+}
+
+function seedMissingVariables(
+  storage: ModelVariableStorage,
+  names: string[],
+  defaultValue: number,
+): void {
+  for (const name of names) {
+    if (storage.getItem(createStorageKey(name)) === null) {
+      storage.setItem(createStorageKey(name), String(defaultValue));
+    }
+  }
 }
 
 export function collectModelVariableNames(settings: Settings): string[] {

@@ -3,7 +3,7 @@ import './style.css';
 import { createApplication, updateStageHitArea } from '@/live2d/app';
 import { fitModel, loadModel } from '@/live2d/model';
 import {
-  reduceCharacterState,
+  transitionCharacterState,
   type CharacterEvent,
   type CharacterState,
 } from '@/live2d/character/characterBrain';
@@ -24,9 +24,7 @@ async function bootstrap(): Promise<void> {
   const app = await createApplication(root);
   const modelSettings = await loadModelSettings(MODEL_URL);
   const modelVariables = createModelVariableStore(modelSettings);
-  modelVariables.initialize();
   const model = await loadModel(app, MODEL_URL, modelSettings);
-
   let state: CharacterState = 'start';
   let leaveTimer: number | undefined;
   const motionRuntime = new MotionRuntime(
@@ -47,10 +45,10 @@ async function bootstrap(): Promise<void> {
   bindWindowPointerInteractions({
     app,
     model,
-    settings: modelSettings,
+    modelSettings,
     dragThreshold: DRAG_THRESHOLD,
     dispatch,
-    resetLeaveTimer,
+    onPointerActivity: resetLeaveTimer,
   });
 
   if (modelSettings.Controllers.KeyTrigger.Enabled) {
@@ -74,11 +72,11 @@ async function bootstrap(): Promise<void> {
   resetLeaveTimer();
 
   function dispatch(event: CharacterEvent): void {
-    state = reduceCharacterState(state, event);
+    state = transitionCharacterState(state, event);
     const plan = planMotion(modelSettings, modelVariables, state, event);
 
     if (plan.kind === 'none' && isTransientState(state)) {
-      state = reduceCharacterState(state, { type: 'MOTION_DONE' });
+      state = transitionCharacterState(state, { type: 'MOTION_DONE' });
       void motionRuntime.play(
         planMotion(modelSettings, modelVariables, state, {
           type: 'MOTION_DONE',

@@ -19,19 +19,19 @@ type PointerStart = {
 export type WindowPointerInteractionOptions = {
   app: PixiApplication;
   model: Live2DModel;
-  settings: Settings;
+  modelSettings: Settings;
   dragThreshold: number;
   dispatch: (event: CharacterEvent) => void;
-  resetLeaveTimer: () => void;
+  onPointerActivity: () => void;
 };
 
 export function bindWindowPointerInteractions({
   app,
   model,
-  settings,
+  modelSettings,
   dragThreshold,
   dispatch,
-  resetLeaveTimer,
+  onPointerActivity,
 }: WindowPointerInteractionOptions): () => void {
   let pointerStart: PointerStart | undefined;
 
@@ -45,10 +45,10 @@ export function bindWindowPointerInteractions({
       pointerId: event.pointerId,
       x: point.x,
       y: point.y,
-      hitArea: resolveHitArea(model, settings, point.x, point.y),
+      hitArea: resolveHitArea(model, modelSettings, point.x, point.y),
       dragging: false,
     };
-    resetLeaveTimer();
+    onPointerActivity();
   };
 
   const handlePointerMove = (event: PointerEvent): void => {
@@ -87,7 +87,7 @@ export function bindWindowPointerInteractions({
     const hitArea = pointerStart.hitArea;
     const wasDragging = pointerStart.dragging;
     pointerStart = undefined;
-    resetLeaveTimer();
+    onPointerActivity();
 
     if (wasDragging) {
       return;
