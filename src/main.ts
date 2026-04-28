@@ -50,7 +50,12 @@ async function bootstrap(): Promise<void> {
   fitModel(app, model, modelSettings.Options);
   app.ticker.add(() => motionRuntime.applyLockedParameters());
 
-  Object.assign(window, { app: app, model: model });
+  Object.assign(window, {
+    app: app,
+    model: model,
+    pmm: model.internalModel.parallelMotionManager,
+    mm: model.internalModel.motionManager,
+  });
 
   bindWindowPointerInteractions({
     app,
@@ -174,7 +179,6 @@ async function bootstrap(): Promise<void> {
 
     return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : 30000;
   }
-
 }
 
 start().catch((error: unknown) => {
