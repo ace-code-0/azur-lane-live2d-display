@@ -11,6 +11,8 @@ import {
 import { executeModelCommands } from '@/live2d/runtime/modelCommands';
 import type { ModelVariableStore } from '@/live2d/runtime/modelVariables';
 import type { Settings } from '@/live2d/settings/modelSettings.types';
+import { dialogController } from '@/ui/dialog';
+import type { DialogContent } from '@/ui/dialog';
 import type { Live2DModel } from 'untitled-pixi-live2d-engine/cubism';
 
 type EngineModel = Live2DModel & {
@@ -194,6 +196,7 @@ export class MotionRuntime {
   }
 
   private applyMotionStartEffects(motion: PlannedMotion): void {
+    this.showMotionDialog(motion);
     executeModelCommands(motion.motion.Command, {
       setMouseTrackingEnabled: (enabled) => {
         if (this.model.automator) {
@@ -216,6 +219,28 @@ export class MotionRuntime {
       },
     });
     this.variables.applyAssignments(motion.motion);
+  }
+
+  private showMotionDialog(motion: PlannedMotion): void {
+    const choices = motion.motion.Choices ?? [];
+
+    if (choices.length > 0) {
+      dialogController.show(
+        choices.map(
+          (choice): DialogContent => ({
+            text: choice.Text,
+            onSelect: () => {
+              void this.playReferencedMotion(choice.NextMtn, 'FORCE');
+            },
+          }),
+        ),
+      );
+      return;
+    }
+
+    if (motion.motion.Text) {
+      dialogController.show([{ text: motion.motion.Text }]);
+    }
   }
 
   private finishForegroundMotion(): void {
