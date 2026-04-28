@@ -48,20 +48,19 @@ export class DialogElement extends LitElement {
         ? html`<div class="overlay" @click=${() => this.hide()}></div>`
         : null}
 
-      <section class="dialog" @click=${(event: Event) => event.stopPropagation()}>
-        <div class="header">
-          ${hasChoices
-            ? null
-            : html`<p class="text">${contents[0]?.text ?? ''}</p>`}
+      <div
+        class=${hasChoices ? 'dialog has-choices' : 'dialog'}
+        @click=${(event: Event) => event.stopPropagation()}
+      >
+        <button
+          class="close-button"
+          @click=${() => this.hide()}
+          aria-label="关闭"
+        >
+          &times;
+        </button>
 
-          <button
-            class="close-button"
-            @click=${() => this.hide()}
-            aria-label="关闭"
-          >
-            &times;
-          </button>
-        </div>
+        ${hasChoices ? null : html`<p class="text">${contents[0]?.text ?? ''}</p>`}
 
         ${hasChoices
           ? html`
@@ -79,7 +78,7 @@ export class DialogElement extends LitElement {
               </div>
             `
           : null}
-      </section>
+      </div>
     `;
   }
 

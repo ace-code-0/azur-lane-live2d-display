@@ -30,7 +30,7 @@ export const dialogStyles = css`
     left: 50%;
     bottom: max(32px, env(safe-area-inset-bottom));
     width: min(360px, calc(100vw - 40px));
-    padding: 14px 18px;
+    padding: 18px 42px 18px 18px;
     border: 1px solid rgb(255 255 255 / 12%);
     border-radius: 12px;
     background: rgb(15 23 42 / 92%);
@@ -42,11 +42,8 @@ export const dialogStyles = css`
     transform: translateX(-50%);
   }
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 10px;
+  .dialog.has-choices {
+    padding: 42px 18px 18px;
   }
 
   .text {
@@ -61,13 +58,20 @@ export const dialogStyles = css`
   }
 
   .close-button {
-    background: none;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgb(255 255 255 / 8%);
     border: none;
     color: rgb(255 255 255 / 60%);
     cursor: pointer;
-    padding: 4px;
-    margin: -4px -4px 0 8px;
-    font-size: 20px;
+    padding: 0;
+    font-size: 18px;
     line-height: 1;
     border-radius: 4px;
     transition:
