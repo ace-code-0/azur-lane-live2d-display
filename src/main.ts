@@ -1,5 +1,6 @@
 import './style.css';
 
+import './ui/audio-permission';
 import { createApplication, updateStageHitArea } from '@/live2d/app';
 import { fitModel, loadModel } from '@/live2d/model';
 import {
