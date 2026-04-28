@@ -2,6 +2,7 @@ import {
   parseMotionReference,
   type MotionReference,
 } from '@/live2d/motion/motionReference';
+import { parseModelCommands } from '@/live2d/runtime/modelCommands';
 import type {
   CharacterEvent,
   CharacterState,
@@ -83,7 +84,7 @@ function selectIdleMotion(
     : { kind: 'parallel', motions };
 }
 
-function planReferencedMotion(
+export function planReferencedMotion(
   settings: Settings,
   variables: ModelVariableStore,
   reference: string | undefined,
@@ -138,6 +139,32 @@ export function selectMotion(
   }
 
   return candidates[pickWeightedIndex(candidates.map(({ motion }) => motion))];
+}
+
+export function isForegroundMotionPlan(plan: MotionPlan): boolean {
+  if (plan.kind === 'none') {
+    return false;
+  }
+
+  if (plan.kind === 'single') {
+    return isForegroundMotionItem(plan.motion.motion);
+  }
+
+  return plan.motions.some((motion) => isForegroundMotionItem(motion.motion));
+}
+
+function isForegroundMotionItem(motion: MotionItem): boolean {
+  return Boolean(
+    motion.File ||
+      motion.Sound ||
+      motion.Text ||
+      motion.Choices?.length ||
+      motion.MotionDuration ||
+      motion.PostCommand ||
+      parseModelCommands(motion.Command).some(
+        (command) => command.kind === 'startMotion',
+      ),
+  );
 }
 
 function pickWeightedIndex(motions: MotionItem[]): number {

@@ -8,7 +8,9 @@ import {
   type CharacterState,
 } from '@/live2d/character/characterBrain';
 import {
+  isForegroundMotionPlan,
   planMotion,
+  planReferencedMotion,
   selectSingleMotion,
 } from '@/live2d/motion/motionPlanner';
 import { MotionRuntime } from '@/live2d/motion/motionRuntime';
@@ -65,7 +67,7 @@ async function bootstrap(): Promise<void> {
 
       for (const item of modelSettings.Controllers.KeyTrigger.Items) {
         if (event.keyCode === item.Input) {
-          dispatch({ type: 'MOTION_REQUEST', motion: item.DownMtn });
+          requestMotion(item.DownMtn);
         }
       }
     });
@@ -85,6 +87,17 @@ async function bootstrap(): Promise<void> {
     const plan = planMotion(modelSettings, modelVariables, state, event);
 
     if (
+      plan.kind !== 'none' &&
+      state !== previousState &&
+      isTransientState(state) &&
+      !isForegroundMotionPlan(plan)
+    ) {
+      state = previousState;
+      void motionRuntime.play(plan, { foreground: false });
+      return;
+    }
+
+    if (
       plan.kind === 'none' &&
       state !== previousState &&
       isTransientState(state)
@@ -99,6 +112,22 @@ async function bootstrap(): Promise<void> {
     }
 
     void motionRuntime.play(plan);
+  }
+
+  function requestMotion(reference: string): void {
+    const plan = planReferencedMotion(
+      modelSettings,
+      modelVariables,
+      reference,
+      'FORCE',
+    );
+
+    if (!isForegroundMotionPlan(plan)) {
+      void motionRuntime.play(plan, { foreground: false });
+      return;
+    }
+
+    dispatch({ type: 'MOTION_REQUEST', motion: reference });
   }
 
   function playStartMotion(): void {

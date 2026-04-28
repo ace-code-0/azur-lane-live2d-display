@@ -43,6 +43,10 @@ export type MotionRuntimeOptions = {
   onForegroundDone?: () => void;
 };
 
+export type RuntimePlayOptions = {
+  foreground?: boolean;
+};
+
 export class MotionRuntime {
   private foregroundMotion: PlannedMotion | undefined;
   private currentCommandAudio: HTMLAudioElement | undefined;
@@ -59,22 +63,25 @@ export class MotionRuntime {
     });
   }
 
-  async play(plan: MotionPlan): Promise<void> {
+  async play(plan: MotionPlan, options: RuntimePlayOptions = {}): Promise<void> {
     if (plan.kind === 'none') {
       return;
     }
 
+    const foreground = options.foreground ?? true;
+
     if (plan.kind === 'single') {
-      await this.playMotion(plan.motion);
+      await this.playMotion(plan.motion, foreground);
       return;
     }
 
-    await this.playParallel(plan.motions);
+    await this.playParallel(plan.motions, foreground);
   }
 
   async playReferencedMotion(
     reference: string,
     priority: MotionPriorityName = 'NORMAL',
+    options: RuntimePlayOptions = {},
   ): Promise<void> {
     const plan = selectSingleMotion(
       this.settings,
@@ -83,7 +90,7 @@ export class MotionRuntime {
       priority,
     );
 
-    await this.play(plan);
+    await this.play(plan, options);
   }
 
   applyLockedParameters(): void {
@@ -92,12 +99,15 @@ export class MotionRuntime {
     }
   }
 
-  private async playParallel(motions: PlannedMotion[]): Promise<void> {
+  private async playParallel(
+    motions: PlannedMotion[],
+    foreground: boolean,
+  ): Promise<void> {
     const baseMotions = motions.filter((motion) => getMotionLayer(motion) === 0);
     const layeredMotions = motions.filter((motion) => getMotionLayer(motion) > 0);
 
     for (const motion of baseMotions) {
-      await this.playMotion(motion);
+      await this.playMotion(motion, foreground);
     }
 
     if (layeredMotions.length > 0) {
@@ -118,11 +128,14 @@ export class MotionRuntime {
     }
   }
 
-  private async playMotion(motion: PlannedMotion): Promise<void> {
+  private async playMotion(
+    motion: PlannedMotion,
+    foreground: boolean,
+  ): Promise<void> {
     if (!motion.motion.File) {
       this.applyMotionStartEffects(motion);
       this.playCommandSound(motion.motion.Sound);
-      this.scheduleCommandOnlyMotionFinish(motion);
+      this.scheduleCommandOnlyMotionFinish(motion, foreground);
       return;
     }
 
@@ -156,7 +169,7 @@ export class MotionRuntime {
       return;
     }
 
-    if (motion.priority !== 'IDLE') {
+    if (foreground && motion.priority !== 'IDLE') {
       this.foregroundMotion = motion;
     }
 
@@ -180,7 +193,9 @@ export class MotionRuntime {
         this.lockedParameters.delete(parameterId);
       },
       startMotion: (reference) => {
-        void this.playReferencedMotion(reference, 'NORMAL');
+        void this.playReferencedMotion(reference, 'NORMAL', {
+          foreground: false,
+        });
       },
     });
     this.variables.applyAssignments(motion.motion);
@@ -198,13 +213,21 @@ export class MotionRuntime {
     this.options.onForegroundDone?.();
   }
 
-  private scheduleCommandOnlyMotionFinish(motion: PlannedMotion): void {
-    if (motion.priority !== 'IDLE') {
+  private scheduleCommandOnlyMotionFinish(
+    motion: PlannedMotion,
+    foreground: boolean,
+  ): void {
+    if (foreground && motion.priority !== 'IDLE') {
       this.foregroundMotion = motion;
+      window.setTimeout(
+        () => this.finishForegroundMotion(),
+        Math.max(motion.motion.MotionDuration ?? 0, 0),
+      );
+      return;
     }
 
     window.setTimeout(
-      () => this.finishForegroundMotion(),
+      () => this.applyMotionPostEffects(motion),
       Math.max(motion.motion.MotionDuration ?? 0, 0),
     );
   }
@@ -221,7 +244,9 @@ export class MotionRuntime {
         this.lockedParameters.delete(parameterId);
       },
       startMotion: (reference) => {
-        void this.playReferencedMotion(reference, 'NORMAL');
+        void this.playReferencedMotion(reference, 'NORMAL', {
+          foreground: false,
+        });
       },
     });
   }
