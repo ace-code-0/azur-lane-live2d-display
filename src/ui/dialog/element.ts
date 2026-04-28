@@ -1,6 +1,7 @@
 import { html, LitElement } from 'lit';
 import { dialogStyles } from './styles';
 import type { DialogContent, DialogState } from './types';
+import log from 'loglevel';
 
 const TEXT_BASE_DURATION_MS = 1_200;
 const TEXT_PER_UNIT_MS = 60;
@@ -23,12 +24,11 @@ export class DialogElement extends LitElement {
 
   show(contents: DialogContent[]): void {
     if (contents.length === 0) {
+      log.info('show(contents: DialogContent[]), No dialog content to display');
       this.hide();
       return;
     }
-
     this.setDialog({ visible: true, contents });
-
     this.closeTimer = window.setTimeout(
       () => this.hide(),
       getDialogDurationMs(contents),
@@ -99,8 +99,7 @@ function getDialogDurationMs(contents: DialogContent[]): number {
   if (contents.length > 1) {
     return CHOICES_DURATION_MS;
   }
-
-  return getTextDurationMs(contents[0]?.text ?? '');
+  return getTextDurationMs(contents[0]?.text);
 }
 
 function getTextDurationMs(text: string): number {
@@ -115,7 +114,6 @@ function getTextDurationMs(text: string): number {
 
 function estimateUnits(text: string): number {
   let units = 0;
-
   for (const ch of text) {
     if (/\p{Script=Han}/u.test(ch)) {
       units += 1;
@@ -127,7 +125,6 @@ function estimateUnits(text: string): number {
       units += 0.3;
     }
   }
-
   return units;
 }
 
