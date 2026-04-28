@@ -45,7 +45,6 @@ type EngineModel = Live2DModel & {
 
 type EngineMotion = {
   setLoop?: (loop: boolean) => void;
-  setIsLoop?: (loop: boolean) => void;
 };
 
 export type MotionRuntimeOptions = {
@@ -318,7 +317,6 @@ export class MotionRuntime {
     }
 
     engineMotion.setLoop?.(true);
-    engineMotion.setIsLoop?.(true);
   }
 }
 
