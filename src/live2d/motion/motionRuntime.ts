@@ -34,9 +34,18 @@ type EngineModel = Live2DModel & {
       getId(parameterId: string): unknown;
     };
     motionManager?: {
+      loadMotion?: (
+        group: string,
+        index: number,
+      ) => Promise<unknown>;
       on?: (event: 'motionFinish', listener: () => void) => void;
     };
   };
+};
+
+type EngineMotion = {
+  setLoop?: (loop: boolean) => void;
+  setIsLoop?: (loop: boolean) => void;
 };
 
 export type MotionRuntimeOptions = {
@@ -111,6 +120,10 @@ export class MotionRuntime {
     }
 
     if (layeredMotions.length > 0) {
+      await Promise.all(
+        layeredMotions.map((motion) => this.applyMotionLoopSetting(motion)),
+      );
+
       const results = await this.model.parallelMotion(
         layeredMotions.map((motion) => ({
           group: motion.group,
@@ -142,6 +155,8 @@ export class MotionRuntime {
     const layer = getMotionLayer(motion);
 
     if (layer > 0) {
+      await this.applyMotionLoopSetting(motion);
+
       const [accepted] = await this.model.parallelMotion([
         {
           group: motion.group,
@@ -157,6 +172,8 @@ export class MotionRuntime {
 
       return;
     }
+
+    await this.applyMotionLoopSetting(motion);
 
     const accepted = await this.model.motion(
       motion.group,
@@ -285,6 +302,28 @@ export class MotionRuntime {
   private resolveSoundPath(path: string): string {
     return `/model/${path}`;
   }
+
+  private async applyMotionLoopSetting(motion: PlannedMotion): Promise<void> {
+    if (motion.motion.FileLoop !== true) {
+      return;
+    }
+
+    const engineMotion = await this.model.internalModel?.motionManager?.loadMotion?.(
+      motion.group,
+      motion.index,
+    );
+
+    if (!isEngineMotion(engineMotion)) {
+      return;
+    }
+
+    engineMotion.setLoop?.(true);
+    engineMotion.setIsLoop?.(true);
+  }
+}
+
+function isEngineMotion(value: unknown): value is EngineMotion {
+  return typeof value === 'object' && value !== null;
 }
 
 function getMotionLayer(motion: PlannedMotion): number {
