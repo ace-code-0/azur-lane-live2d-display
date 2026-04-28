@@ -67,6 +67,7 @@ export class MotionRuntime {
     private readonly options: MotionRuntimeOptions = {},
   ) {
     this.model.internalModel?.motionManager?.on?.('motionFinish', () => {
+      console.log('Motion finished');
       this.finishForegroundMotion();
     });
   }
