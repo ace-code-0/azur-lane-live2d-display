@@ -23,7 +23,11 @@ const MODEL_URL = '/model/model0.json';
 const DRAG_THRESHOLD = 8;
 
 async function bootstrap(): Promise<void> {
-  await window.audioPlaybackPermissionReady;
+  const audioPlaybackPermissionReady = window.audioPlaybackPermissionReady;
+  if (!audioPlaybackPermissionReady) {
+    throw new Error('audio playback permission gate not initialized');
+  }
+
   const root = document.getElementById('app');
   if (!root) {
     throw new Error('#app not found');
@@ -80,8 +84,10 @@ async function bootstrap(): Promise<void> {
     fitModel(app, model, modelSettings.Options);
   });
 
-  playStartMotion();
-  resetLeaveTimer();
+  void audioPlaybackPermissionReady.then(() => {
+    playStartMotion();
+    resetLeaveTimer();
+  });
 
   function dispatch(event: CharacterEvent): void {
     const previousState = state;
