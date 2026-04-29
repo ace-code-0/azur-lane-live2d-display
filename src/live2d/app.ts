@@ -10,7 +10,7 @@ export async function createApplication(
     preference: 'webgl',
     resizeTo: window,
     autoDensity: true,
-    resolution: window.devicePixelRatio | 1,
+    resolution: window.devicePixelRatio || 1,
     backgroundAlpha: 0,
     antialias: true,
   });

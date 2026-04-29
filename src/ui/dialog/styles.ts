@@ -7,20 +7,13 @@ export const dialogStyles = css`
     z-index: 1000;
     pointer-events: none;
     color: #f8fafc;
-    font-family:
-      Inter,
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      sans-serif;
+    font-family: Inter, system-ui, sans-serif;
   }
 
   .overlay {
     position: absolute;
     inset: 0;
-    background: rgb(0 0 0 / 15%);
+    background: rgb(0 63 127/ 15%);
     pointer-events: auto;
     backdrop-filter: blur(1px);
   }

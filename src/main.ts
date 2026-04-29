@@ -22,12 +22,8 @@ import { bindWindowPointerInteractions } from '@/live2d/interaction/pointerInter
 const MODEL_URL = '/model/model0.json';
 const DRAG_THRESHOLD = 8;
 
-async function start(): Promise<void> {
-  await window.audioPlaybackPermissionReady;
-  await bootstrap();
-}
-
 async function bootstrap(): Promise<void> {
+  await window.audioPlaybackPermissionReady;
   const root = document.getElementById('app');
   if (!root) {
     throw new Error('#app not found');
@@ -182,6 +178,6 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-start().catch((error: unknown) => {
+bootstrap().catch((error: unknown) => {
   console.error(error);
 });
