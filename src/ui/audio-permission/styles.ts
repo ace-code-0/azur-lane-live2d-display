@@ -1,0 +1,26 @@
+import {css} from 'lit'  
+export const audioPermissionStyles = css`
+:host {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: grid;
+    place-items: center;
+    background: rgba(17, 17, 17, 0.92);
+}
+
+button {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    padding: 14px 18px;
+    color: #fff;
+    font: 16px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+    background: rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+}
+
+button:hover {
+    background: rgba(255, 255, 255, 0.16);
+}
+`;

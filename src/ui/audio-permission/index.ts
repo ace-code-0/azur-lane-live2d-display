@@ -1,1 +1,1 @@
-import './audio-permission';
+export { checkAudioPermission } from "./audio-permission";

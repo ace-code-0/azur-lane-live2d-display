@@ -1,49 +1,46 @@
-import './style.css';
+import "./style.css";
 
-import './ui/audio-permission';
-import { createApplication, updateStageHitArea } from '@/live2d/app';
-import { fitModel, loadModel } from '@/live2d/model';
+import { createApplication, updateStageHitArea } from "@/live2d/app";
+import { fitModel, loadModel } from "@/live2d/model";
 import {
   transitionCharacterState,
   type CharacterEvent,
   type CharacterState,
-} from '@/live2d/character/characterBrain';
+} from "@/live2d/character/characterBrain";
 import {
   isForegroundMotionPlan,
   planMotion,
   planReferencedMotion,
   selectSingleMotion,
-} from '@/live2d/motion/motionPlanner';
-import { MotionRuntime } from '@/live2d/motion/motionRuntime';
-import { loadModelSettings } from '@/live2d/settings/modelSettings';
-import { createModelVariableStore } from '@/live2d/runtime/modelVariables';
-import { bindWindowPointerInteractions } from '@/live2d/interaction/pointerInteractions';
+} from "@/live2d/motion/motionPlanner";
+import { MotionRuntime } from "@/live2d/motion/motionRuntime";
+import { loadModelSettings } from "@/live2d/settings/modelSettings";
+import { createModelVariableStore } from "@/live2d/runtime/modelVariables";
+import { bindWindowPointerInteractions } from "@/live2d/interaction/pointerInteractions";
+import { checkAudioPermission } from "@/ui/audio-permission";
 
-const MODEL_URL = '/model/model0.json';
+const MODEL_URL = "/model/model0.json";
 const DRAG_THRESHOLD = 8;
 
 async function bootstrap(): Promise<void> {
-  const audioPlaybackPermissionReady = window.audioPlaybackPermissionReady;
-  if (!audioPlaybackPermissionReady) {
-    throw new Error('audio playback permission gate not initialized');
-  }
+  const audioPlaybackPermissionReady = checkAudioPermission();
 
-  const root = document.getElementById('app');
+  const root = document.getElementById("app");
   if (!root) {
-    throw new Error('#app not found');
+    throw new Error("#app not found");
   }
   const app = await createApplication(root);
   const modelSettings = await loadModelSettings(MODEL_URL);
   const modelVariables = createModelVariableStore(modelSettings);
   const model = await loadModel(app, MODEL_URL, modelSettings);
-  let state: CharacterState = 'start';
+  let state: CharacterState = "start";
   let leaveTimer: number | undefined;
   const motionRuntime = new MotionRuntime(
     model,
     modelSettings,
     modelVariables,
     {
-      onForegroundDone: () => dispatch({ type: 'MOTION_DONE' }),
+      onForegroundDone: () => dispatch({ type: "MOTION_DONE" }),
     },
   );
 
@@ -68,7 +65,7 @@ async function bootstrap(): Promise<void> {
   });
 
   if (modelSettings.Controllers.KeyTrigger.Enabled) {
-    window.addEventListener('keydown', (event) => {
+    window.addEventListener("keydown", (event) => {
       resetLeaveTimer();
 
       for (const item of modelSettings.Controllers.KeyTrigger.Items) {
@@ -79,7 +76,7 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  window.addEventListener('resize', () => {
+  window.addEventListener("resize", () => {
     updateStageHitArea(app);
     fitModel(app, model, modelSettings.Options);
   });
@@ -95,7 +92,7 @@ async function bootstrap(): Promise<void> {
     const plan = planMotion(modelSettings, modelVariables, state, event);
 
     if (
-      plan.kind !== 'none' &&
+      plan.kind !== "none" &&
       state !== previousState &&
       isTransientState(state) &&
       !isForegroundMotionPlan(plan)
@@ -106,14 +103,14 @@ async function bootstrap(): Promise<void> {
     }
 
     if (
-      plan.kind === 'none' &&
+      plan.kind === "none" &&
       state !== previousState &&
       isTransientState(state)
     ) {
-      state = transitionCharacterState(state, { type: 'MOTION_DONE' });
+      state = transitionCharacterState(state, { type: "MOTION_DONE" });
       void motionRuntime.play(
         planMotion(modelSettings, modelVariables, state, {
-          type: 'MOTION_DONE',
+          type: "MOTION_DONE",
         }),
       );
       return;
@@ -127,7 +124,7 @@ async function bootstrap(): Promise<void> {
       modelSettings,
       modelVariables,
       reference,
-      'FORCE',
+      "FORCE",
     );
 
     if (!isForegroundMotionPlan(plan)) {
@@ -135,19 +132,19 @@ async function bootstrap(): Promise<void> {
       return;
     }
 
-    dispatch({ type: 'MOTION_REQUEST', motion: reference });
+    dispatch({ type: "MOTION_REQUEST", motion: reference });
   }
 
   function playStartMotion(): void {
     const plan = selectSingleMotion(
       modelSettings,
       modelVariables,
-      { group: 'Start' },
-      'FORCE',
+      { group: "Start" },
+      "FORCE",
     );
 
-    if (plan.kind === 'none') {
-      dispatch({ type: 'MOTION_DONE' });
+    if (plan.kind === "none") {
+      dispatch({ type: "MOTION_DONE" });
       return;
     }
 
@@ -156,10 +153,10 @@ async function bootstrap(): Promise<void> {
 
   function isTransientState(nextState: CharacterState): boolean {
     return (
-      nextState === 'start' ||
-      nextState === 'reacting' ||
-      nextState === 'dragging' ||
-      nextState === 'leaving'
+      nextState === "start" ||
+      nextState === "reacting" ||
+      nextState === "dragging" ||
+      nextState === "leaving"
     );
   }
 
@@ -169,7 +166,7 @@ async function bootstrap(): Promise<void> {
     }
 
     leaveTimer = window.setTimeout(
-      () => dispatch({ type: 'IDLE_TIMEOUT' }),
+      () => dispatch({ type: "IDLE_TIMEOUT" }),
       getLeaveTimeoutMs(),
     );
   }
