@@ -719,7 +719,7 @@
     { "Name": "背景", "Motion": "Tap背景" }
   ],
   "Options": {
-    "ScaleFactor": 0.06,
+    "ScaleFactor": 0.12,
     "AnisoLevel": 4,
     "PositionY": 1.75,
     "TexFixed": true,
